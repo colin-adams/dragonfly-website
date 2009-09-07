@@ -1,12 +1,14 @@
-module ImageGallery (
+module Dragonfly.ImageGallery.ImageGallery (
                      divImageGallery,
                      handleImageGallery
                     ) where
 
-import Text.XHtml.Strict
-import URISpace
-import ApplicationState
 import Happstack.Server.SimpleHTTP
+
+import Text.XHtml.Strict
+
+import Dragonfly.ApplicationState
+import Dragonfly.URISpace
 
 -- | Html div to invoke image gallery
 divImageGallery :: Html

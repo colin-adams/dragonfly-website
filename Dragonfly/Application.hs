@@ -1,4 +1,4 @@
-module Application (
+module Dragonfly.Application (
                     showRootPage,
                     handleRoot,
                     handleSignOut
@@ -8,8 +8,9 @@ import Text.XHtml
 import Text.XHtml.Strict
 import Happstack.Server
 import Happstack.Helpers
-import ApplicationState
-import URISpace
+import Dragonfly.ApplicationState
+import Dragonfly.URISpace
+import Dragonfly.ImageGallery.ImageGallery
 
 handleRoot :: MyServerPartT Response
 handleRoot = exactdir "/" $  do
@@ -32,7 +33,7 @@ showRootPage loggedIn = do
                  False -> loginRegisterDiv
                  True -> signOutDiv
   return $ toResponse $ (header << thetitle << titleText) +++
-             (body << ((h1 << titleText) +++ divCont))
+             (body << ((h1 << titleText) +++ divCont +++ divImageGallery))
 
 rootPage :: Maybe Cookie -> MyServerPartT Response
 rootPage sc = do
@@ -48,4 +49,5 @@ loginRegisterDiv = thediv << ((anchor ! [href $ loginURL ++ "?_cont=/"] << "logi
 
 signOutDiv :: Html
 signOutDiv = thediv << (anchor ! [href signOutURL] << "sign out")
+
 

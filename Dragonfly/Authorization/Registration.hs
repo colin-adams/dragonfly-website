@@ -1,31 +1,38 @@
-module Registration (
+module Dragonfly.Authorization.Registration (
                      handleRegistration,
                      handleLogin
                      ) where
 
+import Codec.Utils (listToOctets, listFromOctets)
+
 import Control.Applicative
 import Control.Applicative.Error
 import Control.Applicative.State
+
+import Data.ByteString.Lazy (unpack)
+import Data.Char (ord, chr)
+import Data.Digest.SHA512
 import Data.List as List
-import Text.Formlets
-import qualified Text.XHtml.Strict.Formlets as F
-import qualified Text.XHtml.Strict as X
-import Text.XHtml.Strict ((+++), (<<))
+
 import Database.HaskellDB hiding ((<<))
 import Database.HaskellDB.Database as DB
 import Database.User_table
+
 import Happstack.Server
 import Happstack.Server.HTTP.Types
 import Happstack.Helpers
 import Happstack.Util.Common (Seconds)
-import Data.Char (ord, chr)
-import Codec.Utils (listToOctets, listFromOctets)
-import Data.Digest.SHA512
-import ApplicationState
-import Application
+
 import System.Random
-import URISpace
-import Data.ByteString.Lazy (unpack)
+
+import Text.Formlets
+import qualified Text.XHtml.Strict as X
+import Text.XHtml.Strict ((+++), (<<))
+import qualified Text.XHtml.Strict.Formlets as F
+
+import Dragonfly.URISpace
+import Dragonfly.ApplicationState
+import Dragonfly.Application
 
 type XForm a = F.XHtmlForm IO a
 

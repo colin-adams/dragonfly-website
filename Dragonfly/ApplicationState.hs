@@ -1,5 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module ApplicationState (
+module Dragonfly.ApplicationState (
                          ApplicationState (..),
                          MyServerPartT,
                          initialState,

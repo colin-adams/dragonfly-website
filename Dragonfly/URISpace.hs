@@ -1,4 +1,4 @@
-module URISpace where
+module Dragonfly.URISpace where
 
 signOutURL :: String
 signOutURL = "/_signout"
@@ -8,3 +8,6 @@ loginURL = "/_login"
 
 registerURL :: String
 registerURL = "/_register"
+
+imageGalleryURL :: String
+imageGalleryURL = "/image_gallery"
