@@ -15,8 +15,3 @@ main = do
   sqliteConnect "website.db" $ \db -> do
          let st = initialState db
          simpleHTTP' (\action -> evalStateT action st) (nullConf {port = 9959}) (msum [handleRoot, handleRegistration, handleLogin, handleSignOut, handleImageGallery]) 
-
-
-  
-
-
