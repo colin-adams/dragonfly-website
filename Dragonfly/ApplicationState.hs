@@ -18,7 +18,7 @@ newtype SessionKey = SessionKey Integer deriving (Read, Show, Ord, Eq, Num, Rand
 sessionCookie :: String
 sessionCookie = "sid"
 
-newtype SessionData = SessionData {sesUsername :: String}  deriving (Read, Show, Eq)
+newtype SessionData = SessionData {sesUsername :: String, groups :: [String]}  deriving (Read, Show, Eq)
 
 data Sessions = Sessions {unsession::M.Map SessionKey SessionData}
   deriving (Read, Show, Eq)
@@ -33,10 +33,10 @@ data ApplicationState = ApplicationState {
 initialState :: Database -> ApplicationState
 initialState db = ApplicationState db (Sessions M.empty)
 
-newSession :: String -> SessionKey -> ApplicationState -> ApplicationState
-newSession u k st =
+newSession :: String -> [String] -> SessionKey -> ApplicationState -> ApplicationState
+newSession u g k st =
     let s = sessions st 
         m = unsession s
-        m' = M.insert k (SessionData u) m
+        m' = M.insert k (SessionData u g) m
         s' = s {unsession = m'}
     in st {sessions = s'}
