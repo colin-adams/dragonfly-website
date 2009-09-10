@@ -3,15 +3,11 @@ module Dragonfly.Authorization.Registration (
                      handleLogin
                      ) where
 
-import Codec.Utils (listToOctets, listFromOctets)
-
 import Control.Applicative
 import Control.Applicative.Error
 import Control.Applicative.State
 
 import Data.ByteString.Lazy (unpack)
-import Data.Char (ord, chr)
-import Data.Digest.SHA512
 import Data.List as List
 
 import Database.HaskellDB hiding ((<<))
@@ -33,6 +29,7 @@ import qualified Text.XHtml.Strict.Formlets as F
 import Dragonfly.URISpace
 import Dragonfly.ApplicationState
 import Dragonfly.Application
+import Dragonfly.Authorization.Password
 
 type XForm a = F.XHtmlForm IO a
 
@@ -105,8 +102,7 @@ completeLogin :: Registration -> MyServerPartT Response
 completeLogin reg = do
   ApplicationState db _ <- lift get
   let u = regUser reg
-  let po = map fromIntegral $ hash . listToOctets $ map ord (regPass reg)
-  let p = map chr po
+  let p = encryptPassword (regPass reg)
   not_found <- liftIO $ do
     let q = do
             t <- table user_table
@@ -143,8 +139,7 @@ completeRegistration :: Registration -> MyServerPartT Response
 completeRegistration reg = do
   ApplicationState db _ <- lift get
   let u = regUser reg
-  let po = map fromIntegral $ hash . listToOctets $ map ord (regPass reg)
-  let p = map chr po
+  let p = encryptPassword (regPass reg)
   liftIO $ DB.transaction db (DB.insert db user_table (user_name <<- u # password <<- p # enabled <<- False))
   signIn reg
   rq <- askRq
