@@ -8,7 +8,9 @@ import Database.HaskellDB.HDBC.SQLite3
 import Database.HaskellDB
 import Database.HaskellDB.Database
 import Database.User_table
+import Database.Auth_table
 
+import Dragonfly.Authorization.Authorities
 import Dragonfly.Authorization.Password
 
 import System.Environment
@@ -58,7 +60,8 @@ optionDescriptions =
 addAdministrator :: String -> String -> Database -> IO ()
 addAdministrator user pass db = do
   let p = encryptPassword pass
-  transaction db (insert db user_table (user_name <<- user # password <<- p # enabled <<- True))
-  return ()
+  transaction db $ do
+    insert db user_table (user_name <<- user # password <<- p # enabled <<- True)
+    insert db auth_table (auth_name <<- administratorAuthority)
 
 
