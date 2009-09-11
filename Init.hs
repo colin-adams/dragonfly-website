@@ -9,6 +9,9 @@ import Database.HaskellDB
 import Database.HaskellDB.Database
 import Database.User_table
 import Database.Auth_table
+import qualified Database.User_auth_table as UA
+import Database.Capabilities_table
+import qualified Database.Auth_capabilities_table as AC
 
 import Dragonfly.Authorization.Authorities
 import Dragonfly.Authorization.Password
@@ -61,7 +64,11 @@ addAdministrator :: String -> String -> Database -> IO ()
 addAdministrator user pass db = do
   let p = encryptPassword pass
   transaction db $ do
-    insert db user_table (user_name <<- user # password <<- p # enabled <<- True)
     insert db auth_table (auth_name <<- administratorAuthority)
+    insert db UA.user_auth_table (UA.user_name <<- user # UA.auth_name <<- administratorAuthority)
+    mapM (\c -> insert db capabilities_table (capability <<- c)) allCapabilities
+    mapM (\c -> insert db AC.auth_capabilities_table (AC.auth_name <<- administratorAuthority # AC.capability <<- c)) allCapabilities
+    insert db user_table (user_name <<- user # password <<- p # enabled <<- True)
 
+           
 
