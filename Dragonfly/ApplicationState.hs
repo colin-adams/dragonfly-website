@@ -18,7 +18,7 @@ newtype SessionKey = SessionKey Integer deriving (Read, Show, Ord, Eq, Num, Rand
 sessionCookie :: String
 sessionCookie = "sid"
 
-newtype SessionData = SessionData {sesUsername :: String, groups :: [String]}  deriving (Read, Show, Eq)
+data SessionData = SessionData {sesUsername :: String, groups :: [String]}  deriving (Read, Show, Eq)
 
 data Sessions = Sessions {unsession::M.Map SessionKey SessionData}
   deriving (Read, Show, Eq)

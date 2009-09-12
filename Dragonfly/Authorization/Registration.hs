@@ -8,11 +8,13 @@ import Control.Applicative.Error
 import Control.Applicative.State
 
 import Data.ByteString.Lazy (unpack)
+import Data.Char (chr)
 import Data.List as List
 
 import Database.HaskellDB hiding ((<<))
 import Database.HaskellDB.Database as DB
 import Database.User_table
+import qualified Database.User_auth_table as UA
 
 import Happstack.Server
 import Happstack.Server.HTTP.Types
@@ -89,13 +91,9 @@ login db = Registration <$> (login_user db) <*> (pass "Password")
 login_user :: Database -> XForm String
 login_user db = input `F.checkM` F.ensureM valid error where
     input = "Username" `label` F.input Nothing
-    valid name = do
-      let q = do
-            t <- table user_table
-            restrict (t!user_name .==. constant name)
-            return t
-      rs <- query db q
-      return $ not $ null rs
+    valid name = do 
+      missing <- userAbsent name db
+      return $ not missing
     error = "Username not recognised."
 
 completeLogin :: Registration -> MyServerPartT Response
@@ -103,37 +101,53 @@ completeLogin reg = do
   ApplicationState db _ <- lift get
   let u = regUser reg
   let p = encryptPassword (regPass reg)
-  not_found <- liftIO $ do
-    let q = do
-            t <- table user_table
-            restrict (t!user_name .==. constant u .&&. t!password .==. constant p)
-            return t
-    rs <- query db q
-    return $ null rs
-  case not_found of
-    False -> do
-      signIn reg
+  found <- liftIO $ userPasswordMatches u p db
+  case found of
+    True -> do
+      groups <- liftIO $ groupsForUser u db
+      signIn reg groups
       rq <- askRq
       let c = lookup "_cont" (rqInputs rq)
       let cont = case c of 
                    Just (Input c' _ _) -> map (chr . fromIntegral) (unpack c')
                    Nothing -> ""
       okHtml $ landingPage u cont
-    True -> okHtml $ X.p << ("Password not validated for user name " ++ u)
+    False -> okHtml $ X.p << ("Password not validated for user name " ++ u)
 
 register :: Database -> XForm Registration
 register db = Registration <$> (register_user db) <*> passConfirmed
 
 register_user :: Database -> XForm String
 register_user db = pure_register_user `F.checkM` F.ensureM valid error where
-    valid name = do
-      let q = do
-            t <- table user_table
-            restrict (t!user_name .==. constant name)
-            return t
-      rs <- query db q
-      return $ null rs
+    valid name = userAbsent name db
     error = "Username already exists in the database!"
+
+userAbsent :: String -> Database -> IO Bool
+userAbsent u db = do
+  let q = do
+        t <- table user_table
+        restrict (t!user_name .==. constant u)
+        return t
+  rs <- query db q
+  return $ null rs
+
+userPasswordMatches :: String -> String -> Database -> IO Bool
+userPasswordMatches u p db = do
+    let q = do
+          t <- table user_table
+          restrict (t!user_name .==. constant u .&&. t!password .==. constant p)
+          return t
+    rs <- query db q
+    return $ length rs == 1
+
+groupsForUser :: String -> Database -> IO [String]
+groupsForUser u db = do
+  let q = do
+        t <- table UA.user_auth_table
+        restrict (t!UA.user_name .==. constant u)
+        return t
+  rs <- query db q
+  return $ map (\row -> row!UA.auth_name) rs
 
 completeRegistration :: Registration -> MyServerPartT Response
 completeRegistration reg = do
@@ -141,7 +155,7 @@ completeRegistration reg = do
   let u = regUser reg
   let p = encryptPassword (regPass reg)
   liftIO $ DB.transaction db (DB.insert db user_table (user_name <<- u # password <<- p # enabled <<- False))
-  signIn reg
+  signIn reg []
   rq <- askRq
   let c = lookup "_cont" (rqInputs rq)
   let cont = case c of 
@@ -170,10 +184,11 @@ pass caption = input `F.check` F.ensure valid error where
 label :: String -> XForm String -> XForm String
 label l = F.plug (\xhtml -> X.p << (X.label << (l ++ ": ") +++ xhtml))
 
-signIn :: Registration -> MyServerPartT ()
-signIn reg = do
+signIn :: Registration -> [String] -> MyServerPartT ()
+signIn reg groups = do
+  let u = regUser reg
   key <- liftIO randomIO
-  lift $ modify $ newSession (regUser reg) key
+  lift $ modify $ newSession u groups key
   let c = mkCookie sessionCookie (show key)
   addCookie cookieExpirationTime c
 
