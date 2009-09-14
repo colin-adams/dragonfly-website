@@ -11,7 +11,6 @@ import Dragonfly.Application
 import Dragonfly.ImageGallery.ImageGallery (handleImageGallery)
 
 main :: IO ()
-main = do
-  sqliteConnect "website.db" $ \db -> do
+main = sqliteConnect "website.db" $ \db -> do
          let st = initialState db
          simpleHTTP' (\action -> evalStateT action st) (nullConf {port = 9959}) (msum [handleRoot, handleRegistration, handleLogin, handleSignOut, handleImageGallery]) 
