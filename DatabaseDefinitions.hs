@@ -16,7 +16,7 @@ databaseOptions :: DBOptions
 databaseOptions = DBOptions {useBString = False, makeIdent = mkIdentPreserving}
 
 databaseTables :: [TInfo]
-databaseTables = [userTable, authTable, userAuthTable, capabilitiesTable, authCapabilitiesTable]
+databaseTables = [userTable, authTable, userAuthTable, capabilitiesTable, authCapabilitiesTable, galleryTable]
 
 -- | Definition of users.
 -- | Enabled users also have a list of authorization groups in user_auth_table
@@ -38,6 +38,26 @@ capabilitiesTable = TInfo {tname = "capabilitiesTable", cols = [capabilityColumn
 -- | Capabilities associated with each authority group
 authCapabilitiesTable :: TInfo
 authCapabilitiesTable = TInfo {tname = "authCapabilitiesTable", cols = [authColumn, capabilityColumn]}
+
+-- | Definitions of image galleries
+galleryTable :: TInfo
+galleryTable = TInfo {tname = "galleryTable", cols = [galleryNameColumn, parentGalleryNameColumn, readImageCapabilityNameColumn,
+                                                                       uploadImageCapabilityNameColumn, administerGalleryCapabilityNameColumn]}
+
+galleryNameColumn :: CInfo
+galleryNameColumn = CInfo {cname = "galleryName", descr = (StringT, False)}
+
+parentGalleryNameColumn :: CInfo
+parentGalleryNameColumn = CInfo {cname = "parentGalleryName", descr = (StringT, True)}
+
+readImageCapabilityNameColumn :: CInfo
+readImageCapabilityNameColumn = CInfo {cname = "readImageCapabilityName", descr = (StringT, False)}
+
+uploadImageCapabilityNameColumn :: CInfo
+uploadImageCapabilityNameColumn = CInfo {cname = "uploadImageCapabilityName", descr = (StringT, False)}
+
+administerGalleryCapabilityNameColumn :: CInfo
+administerGalleryCapabilityNameColumn = CInfo {cname = "administerGalleryCapabilityName", descr = (StringT, False)}
 
 userColumn :: CInfo
 userColumn = CInfo {cname = "userName", descr = (StringT, False)}
