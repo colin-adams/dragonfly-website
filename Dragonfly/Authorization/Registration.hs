@@ -13,8 +13,8 @@ import Data.List as List
 
 import Database.HaskellDB hiding ((<<))
 import Database.HaskellDB.Database as DB
-import Database.User_table
-import qualified Database.User_auth_table as UA
+import Database.UserTable
+import qualified Database.UserAuthTable as UA
 
 import Happstack.Server
 import Happstack.Server.HTTP.Types
@@ -86,10 +86,10 @@ htmlPage content = (X.header << (X.thetitle << "Colin's dragonflies"))
   +++ (X.body << content)
 
 login :: Database -> XForm Registration
-login db = Registration <$> (login_user db) <*> (pass "Password")
+login db = Registration <$> (loginUser db) <*> (pass "Password")
 
-login_user :: Database -> XForm String
-login_user db = input `F.checkM` F.ensureM valid error where
+loginUser :: Database -> XForm String
+loginUser db = input `F.checkM` F.ensureM valid error where
     input = "Username" `label` F.input Nothing
     valid name = do 
       missing <- userAbsent name db
@@ -115,18 +115,18 @@ completeLogin reg = do
     False -> okHtml $ X.p << ("Password not validated for user name " ++ u)
 
 register :: Database -> XForm Registration
-register db = Registration <$> (register_user db) <*> passConfirmed
+register db = Registration <$> (registerUser db) <*> passConfirmed
 
-register_user :: Database -> XForm String
-register_user db = pure_register_user `F.checkM` F.ensureM valid error where
+registerUser :: Database -> XForm String
+registerUser db = pureRegisterUser `F.checkM` F.ensureM valid error where
     valid name = userAbsent name db
     error = "Username already exists in the database!"
 
 userAbsent :: String -> Database -> IO Bool
 userAbsent u db = do
   let q = do
-        t <- table user_table
-        restrict (t!user_name .==. constant u)
+        t <- table userTable
+        restrict (t!userName .==. constant u)
         return t
   rs <- query db q
   return $ null rs
@@ -134,8 +134,8 @@ userAbsent u db = do
 userPasswordMatches :: String -> String -> Database -> IO Bool
 userPasswordMatches u p db = do
     let q = do
-          t <- table user_table
-          restrict (t!user_name .==. constant u .&&. t!password .==. constant p)
+          t <- table userTable
+          restrict (t!userName .==. constant u .&&. t!password .==. constant p)
           return t
     rs <- query db q
     return $ length rs == 1
@@ -143,18 +143,18 @@ userPasswordMatches u p db = do
 groupsForUser :: String -> Database -> IO [String]
 groupsForUser u db = do
   let q = do
-        t <- table UA.user_auth_table
-        restrict (t!UA.user_name .==. constant u)
+        t <- table UA.userAuthTable
+        restrict (t!UA.userName .==. constant u)
         return t
   rs <- query db q
-  return $ map (\row -> row!UA.auth_name) rs
+  return $ map (\row -> row!UA.authName) rs
 
 completeRegistration :: Registration -> MyServerPartT Response
 completeRegistration reg = do
   ApplicationState db _ <- lift get
   let u = regUser reg
   let p = encryptPassword (regPass reg)
-  liftIO $ DB.transaction db (DB.insert db user_table (user_name <<- u # password <<- p # enabled <<- False))
+  liftIO $ DB.transaction db (DB.insert db userTable (userName <<- u # password <<- p # enabled <<- False))
   signIn reg []
   rq <- askRq
   let c = lookup "_cont" (rqInputs rq)
@@ -163,8 +163,8 @@ completeRegistration reg = do
                Nothing -> ""
   okHtml $ registeredPage u cont
          
-pure_register_user :: XForm String
-pure_register_user = input `F.check` F.ensure valid error where
+pureRegisterUser :: XForm String
+pureRegisterUser = input `F.check` F.ensure valid error where
     input = "Username" `label` F.input Nothing
     valid = (>= 3) . length
     error = "Username must be three characters or longer."

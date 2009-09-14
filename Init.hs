@@ -7,11 +7,11 @@ module Main (main) where
 import Database.HaskellDB.HDBC.SQLite3
 import Database.HaskellDB
 import Database.HaskellDB.Database
-import Database.User_table
-import Database.Auth_table
-import qualified Database.User_auth_table as UA
-import Database.Capabilities_table
-import qualified Database.Auth_capabilities_table as AC
+import Database.UserTable
+import Database.AuthTable
+import qualified Database.UserAuthTable as UA
+import Database.CapabilitiesTable
+import qualified Database.AuthCapabilitiesTable as AC
 
 import Dragonfly.Authorization.Authorities
 import Dragonfly.Authorization.Password
@@ -61,11 +61,11 @@ addAdministrator :: String -> String -> Database -> IO ()
 addAdministrator user pass db = do
   let p = encryptPassword pass
   transaction db $ do
-    insert db auth_table (auth_name <<- administratorAuthority)
-    insert db UA.user_auth_table (UA.user_name <<- user # UA.auth_name <<- administratorAuthority)
-    mapM_ (insert db capabilities_table . (capability <<-)) allCapabilities
-    mapM_ (\c -> insert db AC.auth_capabilities_table (AC.auth_name <<- administratorAuthority # AC.capability <<- c)) allCapabilities
-    insert db user_table (user_name <<- user # password <<- p # enabled <<- True)
+    insert db authTable (authName <<- administratorAuthority)
+    insert db UA.userAuthTable (UA.userName <<- user # UA.authName <<- administratorAuthority)
+    mapM_ (insert db capabilitiesTable . (capability <<-)) allCapabilities
+    mapM_ (\c -> insert db AC.authCapabilitiesTable (AC.authName <<- administratorAuthority # AC.capability <<- c)) allCapabilities
+    insert db userTable (userName <<- user # password <<- p # enabled <<- True)
 
            
 
