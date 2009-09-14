@@ -6,6 +6,7 @@ module Dragonfly.Authorization.Registration (
 import Control.Applicative
 import Control.Applicative.Error
 import Control.Applicative.State
+import Control.Arrow (second)
 
 import Data.ByteString.Lazy (unpack)
 import Data.Char (chr)
@@ -54,8 +55,7 @@ handleRegistration = do
 withForm :: String -> XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
 withForm name frm handleErrors handleOk = dir (tail name) $ msum
   [ methodSP GET $ createForm [] frm >>= okHtml
-  , withDataFn lookPairs $ \d ->
-      methodSP POST $ handleOk' $ simple d
+  , withDataFn lookPairs $ methodSP POST . handleOk' . simple
   ]
   where
     handleOk' d = do
@@ -66,7 +66,7 @@ withForm name frm handleErrors handleOk = dir (tail name) $ msum
           f <- createForm d frm
           handleErrors f faults
         Success s      -> handleOk s
-    simple d = List.map (\(k,v) -> (k, Left v)) d
+    simple = List.map (second Left)
  
 showErrorsInline :: X.Html -> [String] -> MyServerPartT Response
 showErrorsInline renderedForm errors =
@@ -79,14 +79,14 @@ createForm env frm = do
   return $ X.form X.! [X.method "POST"] << (xml' +++ X.submit "submit" "Submit")
  
 okHtml :: (X.HTML a) => a -> MyServerPartT Response
-okHtml content = ok $ toResponse $ htmlPage $ content
+okHtml = ok . toResponse . htmlPage
  
 htmlPage :: (X.HTML a) => a -> X.Html
 htmlPage content = (X.header << (X.thetitle << "Colin's dragonflies"))
   +++ (X.body << content)
 
 login :: Database -> XForm Registration
-login db = Registration <$> (loginUser db) <*> (pass "Password")
+login db = Registration <$> loginUser db <*> (pass "Password")
 
 loginUser :: Database -> XForm String
 loginUser db = input `F.checkM` F.ensureM valid error where
@@ -102,8 +102,8 @@ completeLogin reg = do
   let u = regUser reg
   let p = encryptPassword (regPass reg)
   found <- liftIO $ userPasswordMatches u p db
-  case found of
-    True -> do
+  if found then
+    do
       groups <- liftIO $ groupsForUser u db
       signIn reg groups
       rq <- askRq
@@ -112,10 +112,10 @@ completeLogin reg = do
                    Just (Input c' _ _) -> map (chr . fromIntegral) (unpack c')
                    Nothing -> ""
       okHtml $ landingPage u cont
-    False -> okHtml $ X.p << ("Password not validated for user name " ++ u)
+    else okHtml $ X.p << ("Password not validated for user name " ++ u)
 
 register :: Database -> XForm Registration
-register db = Registration <$> (registerUser db) <*> passConfirmed
+register db = Registration <$> registerUser db <*> passConfirmed
 
 registerUser :: Database -> XForm String
 registerUser db = pureRegisterUser `F.checkM` F.ensureM valid error where
@@ -147,7 +147,7 @@ groupsForUser u db = do
         restrict (t!UA.userName .==. constant u)
         return t
   rs <- query db q
-  return $ map (\row -> row!UA.authName) rs
+  return $ map (!UA.authName) rs
 
 completeRegistration :: Registration -> MyServerPartT Response
 completeRegistration reg = do

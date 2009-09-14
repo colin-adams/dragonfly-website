@@ -29,9 +29,7 @@ titleText = "Colin's dragonflies"
 
 showRootPage :: Bool -> MyServerPartT Response
 showRootPage loggedIn = do
-  let divCont = case loggedIn of
-                 False -> loginRegisterDiv
-                 True -> signOutDiv
+  let divCont = if loggedIn then signOutDiv else loginRegisterDiv
   return $ toResponse $ (header << thetitle << titleText) +++
              (body << ((h1 << titleText) +++ divCont +++ divImageGallery))
 
