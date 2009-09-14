@@ -12,7 +12,7 @@ import Dragonfly.URISpace
 
 -- | Html div to invoke image gallery
 divImageGallery :: Html
-divImageGallery = thediv << (anchor ! [href $ imageGalleryURL] << "Image gallery")
+divImageGallery = thediv << (anchor ! [href imageGalleryURL] << "Image gallery")
 
 handleImageGallery :: MyServerPartT Response 
 handleImageGallery = dir (tail imageGalleryURL) $ ok $ toResponse

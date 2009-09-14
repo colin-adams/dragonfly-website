@@ -9,4 +9,4 @@ import Data.Digest.SHA512
 
 -- | One-way encyryption of argument
 encryptPassword :: String -> String
-encryptPassword p = map chr $ map fromIntegral $ hash . listToOctets $ map ord p
+encryptPassword = map (chr . fromIntegral) . hash . listToOctets . map ord

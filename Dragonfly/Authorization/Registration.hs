@@ -86,7 +86,7 @@ htmlPage content = (X.header << (X.thetitle << "Colin's dragonflies"))
   +++ (X.body << content)
 
 login :: Database -> XForm Registration
-login db = Registration <$> loginUser db <*> (pass "Password")
+login db = Registration <$> loginUser db <*> pass "Password"
 
 loginUser :: Database -> XForm String
 loginUser db = input `F.checkM` F.ensureM valid error where
