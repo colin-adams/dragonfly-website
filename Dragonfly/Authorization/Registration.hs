@@ -34,6 +34,8 @@ import Dragonfly.URISpace
 import Dragonfly.ApplicationState
 import Dragonfly.Application
 import Dragonfly.Authorization.Password
+import Dragonfly.Authorization.Group
+import Dragonfly.Authorization.User
 
 type XForm a = F.XHtmlForm IO a
 
@@ -105,7 +107,8 @@ completeLogin reg = do
   found <- liftIO $ userPasswordMatches u p db
   if found then
     do
-      groups <- liftIO $ groupsForUser u db
+      g <- liftIO $ groupsForUser u db
+      groups <- liftIO $ mapM (newGroup db) g
       signIn reg groups
       rq <- askRq
       let c = lookup "_cont" (rqInputs rq)
@@ -186,7 +189,7 @@ pass caption = input `F.check` F.ensure valid error where
 label :: String -> XForm String -> XForm String
 label l = F.plug (\xhtml -> X.p << (X.label << (l ++ ": ") +++ xhtml))
 
-signIn :: Registration -> [String] -> MyServerPartT ()
+signIn :: Registration -> [(String, Group)] -> MyServerPartT ()
 signIn reg groups = do
   let u = regUser reg
   key <- liftIO randomIO

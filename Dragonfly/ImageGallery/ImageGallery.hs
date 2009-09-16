@@ -13,10 +13,12 @@ import Database.GalleryTable
 
 import Happstack.Server.SimpleHTTP
 
-import Text.XHtml.Strict
+import qualified Text.XHtml.Strict as X
 
 import Dragonfly.ApplicationState
+import qualified Dragonfly.Authorization.Authorities as Auth
 import Dragonfly.URISpace
+import qualified Dragonfly.Authorization.User as U
 
 data Gallery = Gallery {
       name :: String,
@@ -27,8 +29,8 @@ data Gallery = Gallery {
     }
 
 -- | Html div to invoke image gallery
-divImageGallery :: Html
-divImageGallery = thediv << (anchor ! [href imageGalleryURL] << "Image gallery")
+divImageGallery :: X.Html
+divImageGallery = X.thediv X.<< (X.anchor X.! [X.href imageGalleryURL] X.<< "Image gallery")
 
 -- | Handler for imageGalleryURL
 handleImageGallery :: MyServerPartT Response 
@@ -37,13 +39,24 @@ handleImageGallery = do
   let cookies = rqCookies rq
   let sc = lookup sessionCookie cookies
 
-  ApplicationState db _ <- lift get
+  ApplicationState db sessions <- lift get
   galleries <- liftIO $ topLevelGalleries db
-  authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc) galleries
-  dir (tail imageGalleryURL) $ ok $ toResponse $ body << p << "NotMuch"
-      
+  authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sessions) galleries
+  dir (tail imageGalleryURL) $ ok $ toResponse $ X.body X.<<
+      (galleriesDiv authorizedGalleries)
+
+-- | Display list of galleries      
+galleriesDiv :: [Gallery] -> X.Html
+galleriesDiv galleries =
+    X.thediv X.<< X.ulist X.<< map displayGallery galleries
+
+-- | Display one gallery line
+displayGallery :: Gallery -> X.Html
+displayGallery gallery =
+ X.li X.<< name gallery
+ 
 -- | Get list of all top-level galleries from database
-topLevelGalleries :: DB.Database -> IO [Gallery]
+topLevelGalleries :: Database -> IO [Gallery]
 topLevelGalleries db = do
   let q = do
         t <- DB.table galleryTable
@@ -57,7 +70,16 @@ topLevelGalleries db = do
 newGallery rec = Gallery (rec DB.! galleryName) (rec DB.! parentGalleryName) (rec DB.! readImageCapabilityName)  (rec DB.! uploadImageCapabilityName)  (rec DB.! administerGalleryCapabilityName) 
 
 -- | Check authorization of user to view gallery
-isGalleryAuthorized :: Maybe Cookie -> Gallery -> IO Bool
-isGalleryAuthorized cook gallery = do
-  return True
+isGalleryAuthorized :: Maybe Cookie -> Sessions -> Gallery -> IO Bool
+isGalleryAuthorized cook sessions gallery = do
+  case cook of
+    Nothing -> return defaultAuth
+    Just c -> do
+              let key = cookieValue c
+                  u = session sessions (read key)
+              case u of
+                Nothing -> return defaultAuth
+                Just user -> return (U.authorizedTo user capability || defaultAuth)
+    where capability = readCapabilityName gallery 
+          defaultAuth = capability == Auth.readGalleryCapabilityName
 

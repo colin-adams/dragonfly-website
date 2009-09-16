@@ -6,7 +6,11 @@ administratorAuthority = "admin"
 
 -- | Capabilities known to always exist
 knownCapabilities :: [String]
-knownCapabilities = [uploadImageCapabilityName, administerGalleryCapabilityName]
+knownCapabilities = [readGalleryCapabilityName, uploadImageCapabilityName, administerGalleryCapabilityName]
+
+-- | Authority to read galleries with no additional priviledges
+readGalleryCapabilityName :: String
+readGalleryCapabilityName = "readGalleryCapability"
 
 -- | Authority to upload images to galleries with no additional priviledges
 uploadImageCapabilityName :: String
