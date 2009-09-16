@@ -4,9 +4,9 @@ module Dragonfly.Authorization.Authorities where
 administratorAuthority :: String
 administratorAuthority = "admin"
 
--- | All capabilities in system
-allCapabilities :: [String]
-allCapabilities = [uploadImageCapabilityName, administerGalleryCapabilityName]
+-- | Capabilities known to always exist
+knownCapabilities :: [String]
+knownCapabilities = [uploadImageCapabilityName, administerGalleryCapabilityName]
 
 -- | Authority to upload images to galleries with no additional priviledges
 uploadImageCapabilityName :: String

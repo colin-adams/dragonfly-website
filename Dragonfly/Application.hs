@@ -16,8 +16,8 @@ handleRoot :: MyServerPartT Response
 handleRoot = exactdir "/" $  do
                rq <- askRq
                let cookies = rqCookies rq
-               let sq = lookup sessionCookie cookies
-               rootPage sq
+               let sc = lookup sessionCookie cookies
+               rootPage sc
 
 handleSignOut :: MyServerPartT Response
 handleSignOut = exactdir signOutURL $  do

@@ -1,6 +1,7 @@
 module Dragonfly.Authorization.Registration (
                      handleRegistration,
-                     handleLogin
+                     handleLogin,
+                     groupsForUser
                      ) where
 
 import Control.Applicative
@@ -140,6 +141,7 @@ userPasswordMatches u p db = do
     rs <- query db q
     return $ length rs == 1
 
+-- | All groups which user belongs to
 groupsForUser :: String -> Database -> IO [String]
 groupsForUser u db = do
   let q = do
