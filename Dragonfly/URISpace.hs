@@ -11,3 +11,6 @@ registerURL = "/_register"
 
 imageGalleryURL :: String
 imageGalleryURL = "/image_gallery"
+
+imageUploadURL :: String
+imageUploadURL = "/upload_image"

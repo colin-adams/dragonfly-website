@@ -17,7 +17,7 @@ import qualified Text.XHtml.Strict as X
 
 import Dragonfly.ApplicationState
 import qualified Dragonfly.Authorization.Authorities as Auth
-import Dragonfly.URISpace
+import Dragonfly.URISpace (imageGalleryURL)
 import qualified Dragonfly.Authorization.User as U
 
 data Gallery = Gallery {

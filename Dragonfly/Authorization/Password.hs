@@ -1,12 +1,62 @@
 module Dragonfly.Authorization.Password (
-                 encryptPassword
-                ) where
+                                         stringToSalt,
+                                         saltToString,
+                                         checkSalt,
+                                         buildSaltAndHash
+                                        ) where
 
-import Codec.Utils (listToOctets, listFromOctets)
+import Codec.Utils
+import Control.Monad
 
-import Data.Char (ord, chr)
+import Data.ByteString.Internal
+import Data.Char
 import Data.Digest.SHA512
 
--- | One-way encyryption of argument
-encryptPassword :: String -> String
-encryptPassword = map (chr . fromIntegral) . hash . listToOctets . map ord
+import Numeric
+
+import System.Random
+
+-- | Convert from Unicode Strings (stored in database) to salt
+stringToSalt :: String -> SaltedHash
+stringToSalt p = SaltedHash (strToOctets p)
+
+-- | Convert from SaltedHash to Unicode Strings (to be stored in database)
+saltToString :: SaltedHash -> String
+saltToString (SaltedHash h) =  map w2c (listFromOctets h)
+
+-- | Hash a password
+buildSaltAndHash :: String -> IO SaltedHash
+buildSaltAndHash str = do
+  salt <- randomSalt
+  let salt' = strToOctets salt
+  let str' = strToOctets str
+  let h = slowHash (salt'++str')
+  return $ SaltedHash $ salt'++h
+
+-- | Check salt is valid for password
+checkSalt :: String -> SaltedHash -> Bool
+checkSalt str (SaltedHash h) = h == salt++(slowHash $ salt++(strToOctets str))
+  where salt = take saltLength h
+
+
+-- | Type for encrypted passwords
+newtype SaltedHash = SaltedHash [Octet] deriving (Read, Show, Ord, Eq)
+
+-- | Length for salted hash 
+saltLength :: Int
+saltLength = 16
+
+-- | Convert Unicode strings to bytes
+strToOctets :: String -> [Octet]
+strToOctets = listToOctets . (map c2w)
+
+-- | Hash bytes slowly (to make brute-force attacks harder)
+slowHash :: [Octet] -> [Octet]
+slowHash a = (iterate hash a) !! 512
+
+-- | Random salt as a string
+randomSalt :: IO String
+randomSalt = liftM concat $ sequence $ take saltLength $ repeat $
+  randomRIO (0::Int,15) >>= return . flip showHex ""
+
+

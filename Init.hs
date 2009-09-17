@@ -59,13 +59,13 @@ optionDescriptions =
 
 addAdministrator :: String -> String -> Database -> IO ()
 addAdministrator user pass db = do
-  let p = encryptPassword pass
+  p <- buildSaltAndHash pass
   transaction db $ do
     insert db authTable (authName <<- administratorAuthority)
     insert db UA.userAuthTable (UA.userName <<- user # UA.authName <<- administratorAuthority)
     mapM_ (insert db capabilitiesTable . (capability <<-)) knownCapabilities
     mapM_ (\c -> insert db AC.authCapabilitiesTable (AC.authName <<- administratorAuthority # AC.capability <<- c)) knownCapabilities
-    insert db userTable (userName <<- user # password <<- p # enabled <<- True)
+    insert db userTable (userName <<- user # password <<- (saltToString p) # enabled <<- True)
 
            
 

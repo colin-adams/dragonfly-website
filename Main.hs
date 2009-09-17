@@ -9,8 +9,9 @@ import Dragonfly.Authorization.Registration
 import Dragonfly.ApplicationState
 import Dragonfly.Application
 import Dragonfly.ImageGallery.ImageGallery (handleImageGallery)
+import Dragonfly.ImageGallery.Upload (handleImageUpload)
 
 main :: IO ()
 main = sqliteConnect "website.db" $ \db -> do
          let st = initialState db
-         simpleHTTP' (\action -> evalStateT action st) (nullConf {port = 9959}) (msum [handleRoot, handleRegistration, handleLogin, handleSignOut, handleImageGallery]) 
+         simpleHTTP' (\action -> evalStateT action st) (nullConf {port = 9959}) (msum [handleRoot, handleRegistration, handleLogin, handleSignOut, handleImageGallery, handleImageUpload]) 

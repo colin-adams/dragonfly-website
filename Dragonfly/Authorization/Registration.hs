@@ -103,7 +103,7 @@ completeLogin :: Registration -> MyServerPartT Response
 completeLogin reg = do
   ApplicationState db _ <- lift get
   let u = regUser reg
-  let p = encryptPassword (regPass reg)
+  let p = regPass reg
   found <- liftIO $ userPasswordMatches u p db
   if found then
     do
@@ -137,12 +137,14 @@ userAbsent u db = do
 
 userPasswordMatches :: String -> String -> Database -> IO Bool
 userPasswordMatches u p db = do
-    let q = do
-          t <- table userTable
-          restrict (t!userName .==. constant u .&&. t!password .==. constant p)
-          return t
-    rs <- query db q
-    return $ length rs == 1
+  let q = do
+        t <- table userTable
+        restrict (t!userName .==. constant u)
+        return t
+  rs <- query db q
+  if length rs == 1 && checkSalt p  (stringToSalt ((head rs) ! password)) then
+      return True
+      else return False
 
 -- | All groups which user belongs to
 groupsForUser :: String -> Database -> IO [String]
@@ -158,8 +160,8 @@ completeRegistration :: Registration -> MyServerPartT Response
 completeRegistration reg = do
   ApplicationState db _ <- lift get
   let u = regUser reg
-  let p = encryptPassword (regPass reg)
-  liftIO $ DB.transaction db (DB.insert db userTable (userName <<- u # password <<- p # enabled <<- False))
+  p <- liftIO $ buildSaltAndHash (regPass reg)
+  liftIO $ DB.transaction db (DB.insert db userTable (userName <<- u # password <<- (saltToString p) # enabled <<- False))
   signIn reg []
   rq <- askRq
   let c = lookup "_cont" (rqInputs rq)
