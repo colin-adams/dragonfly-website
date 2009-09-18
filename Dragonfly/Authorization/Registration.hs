@@ -36,6 +36,7 @@ import Dragonfly.Application
 import Dragonfly.Authorization.Password
 import Dragonfly.Authorization.Group
 import Dragonfly.Authorization.User
+import Dragonfly.Authorization.Auth
 
 type XForm a = F.XHtmlForm IO a
 

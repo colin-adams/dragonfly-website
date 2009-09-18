@@ -16,7 +16,7 @@ databaseOptions :: DBOptions
 databaseOptions = DBOptions {useBString = False, makeIdent = mkIdentPreserving}
 
 databaseTables :: [TInfo]
-databaseTables = [userTable, authTable, userAuthTable, capabilitiesTable, authCapabilitiesTable, galleryTable]
+databaseTables = [userTable, authTable, userAuthTable, capabilitiesTable, authCapabilitiesTable, galleryTable, imageTable, galleryImageTable]
 
 -- | Definition of users.
 -- | Enabled users also have a list of authorization groups in user_auth_table
@@ -43,6 +43,14 @@ authCapabilitiesTable = TInfo {tname = "authCapabilitiesTable", cols = [authColu
 galleryTable :: TInfo
 galleryTable = TInfo {tname = "galleryTable", cols = [galleryNameColumn, parentGalleryNameColumn, readImageCapabilityNameColumn,
                                                                        uploadImageCapabilityNameColumn, administerGalleryCapabilityNameColumn]}
+
+-- | Relative URIs for various sized images
+imageTable :: TInfo
+imageTable = TInfo {tname = "imageTable", cols = [indexColumn, thumbnailColumn, previewColumn, originalColumn]}
+
+-- | Images in each gallery
+galleryImageTable :: TInfo
+galleryImageTable = TInfo {tname = "galleryImageTable", cols = [galleryNameColumn, indexColumn]}
 
 galleryNameColumn :: CInfo
 galleryNameColumn = CInfo {cname = "galleryName", descr = (StringT, False)}
@@ -73,6 +81,18 @@ enabledColumn = CInfo {cname = "enabled", descr = (BoolT, False)}
 
 capabilityColumn :: CInfo
 capabilityColumn = CInfo {cname = "capability", descr = (StringT, False)}
+
+indexColumn :: CInfo
+indexColumn = CInfo {cname = "indexNumber", descr = (IntegerT, False)}
+
+thumbnailColumn :: CInfo
+thumbnailColumn = CInfo {cname = "thumbnail", descr = (StringT, False)}
+
+previewColumn :: CInfo
+previewColumn = CInfo {cname = "preview", descr = (StringT, False)}
+
+originalColumn :: CInfo
+originalColumn = CInfo {cname = "original", descr = (StringT, True)}
 
 main :: IO ()
 main = do
