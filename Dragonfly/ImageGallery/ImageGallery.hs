@@ -1,4 +1,7 @@
 module Dragonfly.ImageGallery.ImageGallery (
+                                            Gallery (..),
+                                            authorizedUploadGalleries,
+                                            allGalleries,
                                             divImageGallery,
                                             handleImageGallery
                                            ) where
@@ -27,6 +30,25 @@ data Gallery = Gallery {
       uploadCapabilityName :: String,
       administrationCapabilityName :: String
     }
+
+-- | All galleries
+allGalleries :: Database -> IO [Gallery]
+allGalleries db = do
+  let q = do
+        t <- DB.table galleryTable
+        return t
+  rs <- DB.query db q
+  return $ map newGallery rs
+
+-- | All galleries names to which the user can upload images
+authorizedUploadGalleries :: U.User -> Database -> IO [String]
+authorizedUploadGalleries user db = do
+  let q = do
+        t <- DB.table galleryTable
+        return t
+  rs <- DB.query db q
+  let frs = filter (\rec -> U.authorizedTo user (rec DB.! uploadImageCapabilityName)) rs
+  return $ map (DB.! galleryName) frs
 
 -- | Html div to invoke image gallery
 divImageGallery :: X.Html
