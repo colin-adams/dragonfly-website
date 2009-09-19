@@ -122,7 +122,7 @@ completeRegistration reg = do
   ApplicationState db _ <- lift get
   let u = regUser reg
   p <- liftIO $ buildSaltAndHash (regPass reg)
-  liftIO $ DB.transaction db (DB.insert db userTable (userName <<- u # password <<- (saltToString p) # enabled <<- False))
+  liftIO $ DB.transaction db (DB.insert db userTable (userName <<- u # password <<- saltToString p # enabled <<- False))
   signIn reg []
   rq <- askRq
   let c = lookup "_cont" (rqInputs rq)

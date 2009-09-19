@@ -19,7 +19,7 @@ import System.Random
 
 -- | Convert from Unicode Strings (stored in database) to salt
 stringToSalt :: String -> SaltedHash
-stringToSalt p = SaltedHash (B.unpack . strToBytes $ p)
+stringToSalt = SaltedHash . B.unpack . strToBytes
 
 -- | Convert from SaltedHash to Unicode Strings (to be stored in database)
 saltToString :: SaltedHash -> String
@@ -31,12 +31,12 @@ buildSaltAndHash str = do
   salt <- randomSalt
   let salt' = strToOctets salt
   let str' = strToOctets str
-  let h = slowHash (salt'++str')
-  return $ SaltedHash $ salt'++h
+  let h = slowHash (salt' ++ str')
+  return $ SaltedHash $ salt' ++ h
 
 -- | Check salt is valid for password
 checkSalt :: String -> SaltedHash -> Bool
-checkSalt str (SaltedHash h) = h == salt++(slowHash $ salt++(strToOctets str))
+checkSalt str (SaltedHash h) = h == salt ++ slowHash (salt ++ (strToOctets str))
   where salt = take saltLength h
 
 
