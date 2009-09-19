@@ -36,7 +36,7 @@ buildSaltAndHash str = do
 
 -- | Check salt is valid for password
 checkSalt :: String -> SaltedHash -> Bool
-checkSalt str (SaltedHash h) = h == salt ++ slowHash (salt ++ (strToOctets str))
+checkSalt str (SaltedHash h) = h == salt ++ slowHash (salt ++ strToOctets str)
   where salt = take saltLength h
 
 
@@ -49,11 +49,11 @@ saltLength = 16
 
 -- | Convert Unicode strings to bytes
 strToOctets :: String -> [Octet]
-strToOctets = listToOctets . (map c2w)
+strToOctets = listToOctets . map c2w
 
 -- | Hash bytes slowly (to make brute-force attacks harder)
 slowHash :: [Octet] -> [Octet]
-slowHash a = (iterate hash a) !! 512
+slowHash a = iterate hash a !! 512
 
 -- | Random salt as a string
 randomSalt :: IO String
@@ -61,9 +61,9 @@ randomSalt = liftM concat $ sequence $ take saltLength $ repeat $ randomRIO (0::
 
 -- | Convert from Unicode strings to lazy ByteStrings
 strToBytes :: String -> B.ByteString
-strToBytes str = read str
+strToBytes = read
 
 -- | Convert from lazy ByteStrings to Unicode strings
 bytesToStr :: B.ByteString -> String
-bytesToStr str = show str
+bytesToStr = show
 
