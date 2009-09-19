@@ -50,7 +50,7 @@ divImageGallery = X.thediv X.<< (X.anchor X.! [X.href imageGalleryURL] X.<< "Ima
 
 -- | Handler for imageGalleryURL
 handleImageGallery :: MyServerPartT Response 
-handleImageGallery = do
+handleImageGallery = dir (tail imageGalleryURL) $ do
   rq <- askRq
   let cookies = rqCookies rq
   let sc = lookup sessionCookie cookies
@@ -58,7 +58,7 @@ handleImageGallery = do
   ApplicationState db sessions <- lift get
   galleries <- liftIO $ topLevelGalleries db
   authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sessions) galleries
-  dir (tail imageGalleryURL) $ ok $ toResponse $ X.body X.<< galleriesDiv authorizedGalleries
+  ok $ toResponse $ X.body X.<< galleriesDiv authorizedGalleries
 
 -- | Display list of galleries      
 galleriesDiv :: [Gallery] -> X.Html

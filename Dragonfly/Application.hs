@@ -4,41 +4,58 @@ module Dragonfly.Application (
                     handleSignOut
                     ) where
 
+import Control.Monad
+
+import Data.ByteString.Lazy (unpack)
+import Data.Char (chr)
+
 import Text.XHtml
 import Text.XHtml.Strict
+
 import Happstack.Server
 import Happstack.Helpers
+
 import Dragonfly.ApplicationState
 import Dragonfly.URISpace
 import Dragonfly.ImageGallery.ImageGallery
 
+import Debug.Trace
+import Control.Monad.State
+
 handleRoot :: MyServerPartT Response
-handleRoot = exactdir "/" $  do
-               rq <- askRq
-               let cookies = rqCookies rq
-               let sc = lookup sessionCookie cookies
-               rootPage sc
+handleRoot = do
+  ApplicationState _ sess <- lift get
+  rq <- askRq
+  let paths = trace ("Root page: " ++ show sess) rqPaths rq
+  if null paths then do
+                  let cookies = rqCookies rq
+                  let sc = lookup sessionCookie cookies
+                  let msg = case lookup "_message" (rqInputs rq) of
+                              Just (Input msg' _ _) -> thediv ! [theclass "message"] << thespan << map (chr . fromIntegral) (unpack msg')
+                              Nothing -> thediv << noHtml
+                  rootPage sc msg
+     else mzero
 
 handleSignOut :: MyServerPartT Response
 handleSignOut = exactdir signOutURL $  do
                addCookie 0 (mkCookie sessionCookie "0")
-               rootPage Nothing
+               rootPage Nothing (thediv << noHtml)
 
 titleText :: String
 titleText = "Colin's dragonflies"
 
-showRootPage :: Bool -> MyServerPartT Response
-showRootPage loggedIn = do
+showRootPage :: Bool -> Html -> MyServerPartT Response
+showRootPage loggedIn msg = do
   let divCont = if loggedIn then signOutDiv else loginRegisterDiv
-  return $ toResponse $ (header << thetitle << titleText) +++
-             (body << ((h1 << titleText) +++ divCont +++ divImageGallery))
+  return $ toResponse $ (header << (thetitle << titleText) +++ stylesheet) +++
+             (body << ((h1 << titleText) +++ msg +++ divCont +++ divImageGallery))
 
-rootPage :: Maybe Cookie -> MyServerPartT Response
-rootPage sc = do
+rootPage :: Maybe Cookie -> Html -> MyServerPartT Response
+rootPage sc msg = do
   let loggedIn = case sc of
                    Nothing -> False
                    Just c -> True
-  showRootPage loggedIn
+  showRootPage loggedIn msg
 
 loginRegisterDiv :: Html
 loginRegisterDiv = thediv << ((anchor ! [href $ loginURL ++ "?_cont=/"] << "login") 
@@ -48,4 +65,6 @@ loginRegisterDiv = thediv << ((anchor ! [href $ loginURL ++ "?_cont=/"] << "logi
 signOutDiv :: Html
 signOutDiv = thediv << (anchor ! [href signOutURL] << "sign out")
 
+stylesheet :: Html
+stylesheet = style << "div.message { color: red; }"
 

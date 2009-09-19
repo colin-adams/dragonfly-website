@@ -156,9 +156,9 @@ signIn :: Registration -> [(String, Group)] -> MyServerPartT ()
 signIn reg groups = do
   let u = regUser reg
   key <- liftIO randomIO
-  lift $ modify $ newSession u groups key
   let c = mkCookie sessionCookie (show key)
   addCookie cookieExpirationTime c
+  lift $ modify $ newSession u groups key
 
 registeredPage :: String -> String -> X.Html
 registeredPage u continuation = 

@@ -16,6 +16,8 @@ import qualified Text.XHtml.Strict.Formlets as F
 
 import Dragonfly.ApplicationState
 
+import Debug.Trace
+
 type XForm a = F.XHtmlForm IO a
 
 withForm :: String -> XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
@@ -45,7 +47,9 @@ createForm env frm = do
   return $ X.form X.! [X.method "POST"] << (xml' +++ X.submit "submit" "Submit")
  
 okHtml :: (X.HTML a) => a -> MyServerPartT Response
-okHtml = ok . toResponse . htmlPage
+okHtml content = do
+  ApplicationState _ sess <- lift get
+  trace ("okHtml: " ++ show sess) ok . toResponse . htmlPage $ content
  
 htmlPage :: (X.HTML a) => a -> X.Html
 htmlPage content = (X.header << (X.thetitle << "Colin's dragonflies"))

@@ -8,7 +8,7 @@ module Dragonfly.Authorization.Password (
 import Codec.Utils
 import Control.Monad
 
-import Data.ByteString.Internal
+import Data.ByteString.Internal (c2w)
 import qualified Data.ByteString.Lazy as B
 import Data.Char
 import Data.Digest.SHA512
