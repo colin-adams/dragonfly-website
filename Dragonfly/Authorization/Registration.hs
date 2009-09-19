@@ -103,7 +103,7 @@ userPasswordMatches u p db = do
         restrict (t!userName .==. constant u)
         return t
   rs <- query db q
-  if length rs == 1 && checkSalt p  (stringToSalt ((head rs) ! password)) then
+  if length rs == 1 && checkSalt p  (stringToSalt (head rs ! password)) then
       return True
       else return False
 
