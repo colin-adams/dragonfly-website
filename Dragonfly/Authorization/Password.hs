@@ -9,6 +9,7 @@ import Codec.Utils
 import Control.Monad
 
 import Data.ByteString.Internal
+import qualified Data.ByteString.Lazy as B
 import Data.Char
 import Data.Digest.SHA512
 
@@ -18,11 +19,11 @@ import System.Random
 
 -- | Convert from Unicode Strings (stored in database) to salt
 stringToSalt :: String -> SaltedHash
-stringToSalt p = SaltedHash (strToOctets p)
+stringToSalt p = SaltedHash (B.unpack . strToBytes $ p)
 
 -- | Convert from SaltedHash to Unicode Strings (to be stored in database)
 saltToString :: SaltedHash -> String
-saltToString (SaltedHash h) =  map w2c (listFromOctets h)
+saltToString (SaltedHash h) =  bytesToStr . B.pack $ h
 
 -- | Hash a password
 buildSaltAndHash :: String -> IO SaltedHash
@@ -58,5 +59,11 @@ slowHash a = (iterate hash a) !! 512
 randomSalt :: IO String
 randomSalt = liftM concat $ sequence $ take saltLength $ repeat $ randomRIO (0::Int,15) >>= return . flip showHex ""
 
+-- | Convert from Unicode strings to lazy ByteStrings
+strToBytes :: String -> B.ByteString
+strToBytes str = read str
 
+-- | Convert from lazy ByteStrings to Unicode strings
+bytesToStr :: B.ByteString -> String
+bytesToStr str = show str
 
