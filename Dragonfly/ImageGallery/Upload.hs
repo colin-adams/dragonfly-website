@@ -3,7 +3,7 @@ module Dragonfly.ImageGallery.Upload where
 
 import Control.Applicative.State
 
-import Data.Foldable (toList)
+import qualified Data.Foldable as Fo (foldr)
 import Data.Maybe (mapMaybe)
 import Data.Tree
 
@@ -37,16 +37,24 @@ uploadImagePage user = do
 uploadImage :: String -> MyServerPartT Response
 uploadImage name = okHtml $ p << (name ++ " uploaded")
 
+-- | Gallery selection widget builder
+-- toList is not sufficient, as we need a nesting depth in order to add hypens to the visual display
 gallerySelectFormlet :: Tree (Gallery, Bool) -> XHtmlFormlet IO String
 gallerySelectFormlet =
-    selectRaw [multiple, size "6"] . mapMaybe gallerySelection . toList
+    selectRaw [multiple, size "6"] . mapMaybe gallerySelection . Fo.foldr (augmentedTreeNode (-1)) []
+
+-- | Add nesting depth when flattening
+augmentedTreeNode :: Int -> (Gallery, Bool) -> [(Gallery, Bool, Int)] -> [(Gallery, Bool, Int)]
+augmentedTreeNode depth (gallery, selectable) acc =
+    acc ++ [(gallery, selectable, depth)]
 
 -- | Selection-list widget for authorized galleries
-gallerySelection :: (Gallery, Bool) -> Maybe (String, Html)
-gallerySelection (gallery, selectable) =
+gallerySelection :: (Gallery, Bool, Int) -> Maybe (String, Html)
+gallerySelection (gallery, selectable, depth) =
     let nm = Dragonfly.ImageGallery.ImageGallery.name gallery 
+        hyphens = replicate depth '-'
     in if selectable then
-           Just (nm, p << nm)
+           Just (nm, p << (hyphens ++ nm))
        else Nothing
 
 -- | Galleries arranged as a tree, with upload authorization status
