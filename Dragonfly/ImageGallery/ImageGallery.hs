@@ -34,20 +34,14 @@ data Gallery = Gallery {
 -- | All galleries
 allGalleries :: Database -> IO [Gallery]
 allGalleries db = do
-  let q = do
-        t <- DB.table galleryTable
-        return t
-  rs <- DB.query db q
+  rs <- DB.query db (DB.table galleryTable)
   return $ map newGallery rs
 
 -- | All galleries names to which the user can upload images
 authorizedUploadGalleries :: U.User -> Database -> IO [String]
 authorizedUploadGalleries user db = do
-  let q = do
-        t <- DB.table galleryTable
-        return t
-  rs <- DB.query db q
-  let frs = filter (\rec -> U.authorizedTo user (rec DB.! uploadImageCapabilityName)) rs
+  rs <- DB.query db (DB.table galleryTable)
+  let frs = filter (U.authorizedTo user . (DB.! uploadImageCapabilityName)) rs
   return $ map (DB.! galleryName) frs
 
 -- | Html div to invoke image gallery
@@ -64,8 +58,7 @@ handleImageGallery = do
   ApplicationState db sessions <- lift get
   galleries <- liftIO $ topLevelGalleries db
   authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sessions) galleries
-  dir (tail imageGalleryURL) $ ok $ toResponse $ X.body X.<<
-      (galleriesDiv authorizedGalleries)
+  dir (tail imageGalleryURL) $ ok $ toResponse $ X.body X.<< galleriesDiv authorizedGalleries
 
 -- | Display list of galleries      
 galleriesDiv :: [Gallery] -> X.Html
@@ -93,7 +86,7 @@ newGallery rec = Gallery (rec DB.! galleryName) (rec DB.! parentGalleryName) (re
 
 -- | Check authorization of user to view gallery
 isGalleryAuthorized :: Maybe Cookie -> Sessions -> Gallery -> IO Bool
-isGalleryAuthorized cook sessions gallery = do
+isGalleryAuthorized cook sessions gallery =
   case cook of
     Nothing -> return defaultAuth
     Just c -> do

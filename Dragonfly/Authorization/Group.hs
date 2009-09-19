@@ -14,12 +14,10 @@ data Group = Group {name :: String, capabilities :: [String] } deriving (Read, S
 -- | Read group definition from database
 newGroup :: Database -> String -> IO (String, Group)
 newGroup db nm = do
-  let q = do
-        t <- table capabilitiesTable
-        return t
+  let q = table capabilitiesTable
   rs <- query db q
-  let cps = map (\rec -> rec!capability) rs
-  return $ (nm, Group nm cps)
+  let cps = map (!capability) rs
+  return (nm, Group nm cps)
 
 -- | Does the group have the capability?
 hasCapability :: String -> Group -> Bool

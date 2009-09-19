@@ -37,7 +37,7 @@ uploadImagePage user = do
   -- gsf <- liftIO $ gallerySelectFormlet (galleryTree gs gNames)
   ok $ toResponse $ body << "" --gsf
 
-gallerySelectFormlet :: Tree (Gallery, Bool) -> XHtmlFormlet IO [Char]
+gallerySelectFormlet :: Tree (Gallery, Bool) -> XHtmlFormlet IO String
 gallerySelectFormlet galleries =
     selectRaw [] [("fred", p << "Freddy")]
 

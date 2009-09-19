@@ -15,7 +15,7 @@ import Dragonfly.Authorization.User
 -- | Run f only when logged in
 withSession :: (User -> MyServerPartT a) -> MyServerPartT a -> MyServerPartT a
 withSession f guestSPT = withSessionId action
-  where action (Just sid) = (findSession sid) >>= (maybe noSession f)
+  where action (Just sid) = findSession sid >>= maybe noSession f
         action Nothing = guestSPT
         noSession = clearSessionCookie >> guestSPT
 

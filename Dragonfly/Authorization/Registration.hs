@@ -9,7 +9,6 @@ import Control.Applicative.State
 
 import Data.ByteString.Lazy (unpack)
 import Data.Char (chr)
-import Data.List as List
 
 import Database.HaskellDB hiding ((<<))
 import Database.HaskellDB.Database as DB
@@ -17,13 +16,10 @@ import Database.UserTable
 import qualified Database.UserAuthTable as UA
 
 import Happstack.Server
-import Happstack.Server.HTTP.Types
-import Happstack.Helpers
 import Happstack.Util.Common (Seconds)
 
 import System.Random
 
-import Text.Formlets
 import qualified Text.XHtml.Strict as X
 import Text.XHtml.Strict ((+++), (<<))
 import qualified Text.XHtml.Strict.Formlets as F
