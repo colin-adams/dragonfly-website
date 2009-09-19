@@ -57,7 +57,7 @@ slowHash a = iterate hash a !! 512
 
 -- | Random salt as a string
 randomSalt :: IO String
-randomSalt = liftM concat $ sequence $ take saltLength $ repeat $ randomRIO (0::Int,15) >>= return . flip showHex ""
+randomSalt = liftM concat $ sequence $ replicate saltLength $ randomRIO (0::Int,15) >>= return . flip showHex ""
 
 -- | Convert from Unicode strings to lazy ByteStrings
 strToBytes :: String -> B.ByteString
