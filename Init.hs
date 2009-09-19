@@ -65,7 +65,7 @@ addAdministrator user pass db = do
     insert db UA.userAuthTable (UA.userName <<- user # UA.authName <<- administratorAuthority)
     mapM_ (insert db capabilitiesTable . (capability <<-)) knownCapabilities
     mapM_ (\c -> insert db AC.authCapabilitiesTable (AC.authName <<- administratorAuthority # AC.capability <<- c)) knownCapabilities
-    insert db userTable (userName <<- user # password <<- (saltToString p) # enabled <<- True)
+    insert db userTable (userName <<- user # password <<- saltToString p # enabled <<- True)
 
            
 
