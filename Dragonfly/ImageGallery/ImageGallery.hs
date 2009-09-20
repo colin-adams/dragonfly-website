@@ -30,7 +30,7 @@ data Gallery = Gallery {
       readCapabilityName :: String,
       uploadCapabilityName :: String,
       administrationCapabilityName :: String
-    }
+    } deriving Show
 
 -- | All galleries
 allGalleries :: Database -> IO [Gallery]

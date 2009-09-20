@@ -22,6 +22,8 @@ import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
 import Dragonfly.Forms
 
+import Debug.Trace
+
 -- | Handler for imageUploadURL
 handleImageUpload :: MyServerPartT Response 
 handleImageUpload = dir (tail imageUploadURL) $ withSession uploadImagePage loginRequired
@@ -32,13 +34,12 @@ uploadImagePage user = do
   ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
-  processForm (gallerySelectFormlet (galleryTree gs gNames) Nothing) showErrorsInline uploadImage
+  trace (show $ galleryTree gs gNames) $ processForm (gallerySelectFormlet (galleryTree gs gNames) Nothing) showErrorsInline uploadImage
 
 uploadImage :: String -> MyServerPartT Response
-uploadImage name = okHtml $ p << (name ++ " uploaded")
+uploadImage name = okHtml $ p << (name ++ " uploaded (well, not really - TODO")
 
 -- | Gallery selection widget builder
--- toList is not sufficient, as we need a nesting depth in order to add hypens to the visual display
 gallerySelectFormlet :: Tree (Gallery, Bool) -> XHtmlFormlet IO String
 gallerySelectFormlet = selectRaw [multiple, size "6"] . mapMaybe gallerySelection . Fo.foldr (augmentedTreeNode (-1)) []
 
@@ -47,7 +48,7 @@ augmentedTreeNode :: Int -> (Gallery, Bool) -> [(Gallery, Bool, Int)] -> [(Galle
 augmentedTreeNode depth (gallery, selectable) acc =
     acc ++ [(gallery, selectable, depth)]
 
--- | Selection-list widget for authorized galleries
+-- | Selection-list widget for authorized gallery
 gallerySelection :: (Gallery, Bool, Int) -> Maybe (String, Html)
 gallerySelection (gallery, selectable, depth) =
     let nm = Dragonfly.ImageGallery.ImageGallery.name gallery 
