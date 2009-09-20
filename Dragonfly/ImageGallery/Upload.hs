@@ -32,7 +32,7 @@ uploadImagePage user = do
   ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
-  withForm imageUploadURL (gallerySelectFormlet (galleryTree gs gNames) Nothing) showErrorsInline uploadImage
+  processForm (gallerySelectFormlet (galleryTree gs gNames) Nothing) showErrorsInline uploadImage
 
 uploadImage :: String -> MyServerPartT Response
 uploadImage name = okHtml $ p << (name ++ " uploaded")
@@ -40,8 +40,7 @@ uploadImage name = okHtml $ p << (name ++ " uploaded")
 -- | Gallery selection widget builder
 -- toList is not sufficient, as we need a nesting depth in order to add hypens to the visual display
 gallerySelectFormlet :: Tree (Gallery, Bool) -> XHtmlFormlet IO String
-gallerySelectFormlet =
-    selectRaw [multiple, size "6"] . mapMaybe gallerySelection . Fo.foldr (augmentedTreeNode (-1)) []
+gallerySelectFormlet = selectRaw [multiple, size "6"] . mapMaybe gallerySelection . Fo.foldr (augmentedTreeNode (-1)) []
 
 -- | Add nesting depth when flattening
 augmentedTreeNode :: Int -> (Gallery, Bool) -> [(Gallery, Bool, Int)] -> [(Gallery, Bool, Int)]

@@ -48,6 +48,7 @@ showRootPage loggedIn msg = do
 
 rootPage :: Maybe Cookie -> Html -> MyServerPartT Response
 rootPage sc msg = do
+  -- Actually we should check the session and expire the cookie if not present
   let loggedIn = case sc of
                    Nothing -> False
                    Just c -> True

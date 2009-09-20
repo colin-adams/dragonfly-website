@@ -13,30 +13,25 @@ import Happstack.Server
 import Dragonfly.ApplicationState
 import Dragonfly.Authorization.User
 
-import Debug.Trace
-
 -- | Run f only when logged in
 withSession :: (User -> MyServerPartT a) -> MyServerPartT a -> MyServerPartT a
-withSession f guestSPT = withSessionId action
-    where action (Just sid) = findSession sid >>= maybe noSession f
-          action Nothing = guestSPT
-          noSession = clearSessionCookie >> guestSPT
-
--- | Get session identifier from cookies
-getSessionId  :: Control.Monad.Reader.ReaderT ([(String, Input)], [(String, Cookie)]) Maybe (Maybe String)
-getSessionId = liftM Just (readCookieValue sessionCookie) `mplus` return Nothing
-
--- | Run action with a possible logged-in user
-withSessionId :: (MonadPlus m, ServerMonad m) => (Maybe String -> m r) -> m r
-withSessionId = withDataFn getSessionId
+withSession f guestSPT = do
+  rq <- askRq
+  let cookies = rqCookies rq
+      sc = lookup sessionCookie cookies
+  case sc of
+    Nothing -> guestSPT
+    Just ck -> findSession ck >>= maybe noSession f
+    where noSession = clearSessionCookie >> guestSPT
 
 -- | Remove any expired session cookie
 clearSessionCookie :: MyServerPartT ()
 clearSessionCookie = addCookie 0 (mkCookie sessionCookie "0")
 
--- | Find user from session cookie value
-findSession :: String -> MyServerPartT (Maybe User)
+-- | Find user from session cookie
+findSession :: Cookie -> MyServerPartT (Maybe User)
 findSession sid = do
   ApplicationState _ sessions <- lift ask
   sess <- liftIO $ readMVar sessions
-  return $ session sess (SessionKey (read sid))
+  let key = cookieValue sid
+  return $ session sess (read key)

@@ -18,9 +18,10 @@ import Dragonfly.ApplicationState
 
 type XForm a = F.XHtmlForm IO a
 
-withForm :: String -> XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
-withForm name frm handleErrors handleOk = dir (tail name) $ msum
-  [ methodSP GET $ createForm [] frm >>= okHtml
+-- | Process form for GET and PUT methods
+processForm :: XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
+processForm frm handleErrors handleOk = msum
+  [methodSP GET $ createForm [] frm >>= okHtml
   , withDataFn lookPairs $ methodSP POST . handleOk' . simple
   ]
   where
@@ -33,20 +34,40 @@ withForm name frm handleErrors handleOk = dir (tail name) $ msum
           handleErrors f faults
         Success s      -> handleOk s
     simple = List.map (second Left)
- 
+
+-- | Process form if URL path matches name
+withForm :: String -> XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
+withForm name frm handleErrors handleOk = dir (tail name) $ msum
+  [methodSP GET $ createForm [] frm >>= okHtml
+  , withDataFn lookPairs $ methodSP POST . handleOk' . simple
+  ]
+  where
+    handleOk' d = do
+      let (extractor, html, _) = runFormState d frm
+      v <- liftIO extractor  
+      case v of
+        Failure faults -> do 
+          f <- createForm d frm
+          handleErrors f faults
+        Success s      -> handleOk s
+    simple = List.map (second Left)
+
+-- | Prepend errors to the rendered form 
 showErrorsInline :: X.Html -> [String] -> MyServerPartT Response
-showErrorsInline renderedForm errors =
-  okHtml $ X.toHtml (show errors) +++ renderedForm
+showErrorsInline renderedForm errors = okHtml $ X.toHtml (show errors) +++ renderedForm
  
+-- | Display a form to the user
 createForm :: Env -> XForm a -> MyServerPartT X.Html
 createForm env frm = do
   let (extractor, xml, endState) = runFormState env frm
   xml' <- liftIO xml
   return $ X.form X.! [X.method "POST"] << (xml' +++ X.submit "submit" "Submit")
  
+-- | Render an html page as a good response
 okHtml :: (X.HTML a) => a -> MyServerPartT Response
 okHtml = ok . toResponse . htmlPage
  
+-- | Render content within a standatd html template
 htmlPage :: (X.HTML a) => a -> X.Html
 htmlPage content = (X.header << (X.thetitle << "Colin's dragonflies"))
   +++ (X.body << content)
