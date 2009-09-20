@@ -1,7 +1,7 @@
 -- | Form for uploading images
 module Dragonfly.ImageGallery.Upload where
 
-import Control.Applicative.State
+import Control.Monad.Reader
 
 import qualified Data.Foldable as Fo (foldr)
 import Data.Maybe (mapMaybe)
@@ -29,7 +29,7 @@ handleImageUpload = dir (tail imageUploadURL) $ withSession uploadImagePage logi
 -- | XHtml page to upload an image to a gallery
 uploadImagePage :: User -> MyServerPartT Response
 uploadImagePage user = do
-  ApplicationState db _ <- lift get
+  ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
   withForm imageUploadURL (gallerySelectFormlet (galleryTree gs gNames) Nothing) showErrorsInline uploadImage

@@ -6,7 +6,8 @@ module Dragonfly.ImageGallery.ImageGallery (
                                             handleImageGallery
                                            ) where
 
-import Control.Applicative.State
+import Control.Monad.Reader
+import Control.Concurrent.MVar
 
 import qualified Data.Map as Map
 
@@ -55,9 +56,10 @@ handleImageGallery = dir (tail imageGalleryURL) $ do
   let cookies = rqCookies rq
   let sc = lookup sessionCookie cookies
 
-  ApplicationState db sessions <- lift get
+  ApplicationState db sessions <- lift ask
+  sess <- liftIO $ readMVar sessions
   galleries <- liftIO $ topLevelGalleries db
-  authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sessions) galleries
+  authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sess) galleries
   ok $ toResponse $ X.body X.<< galleriesDiv authorizedGalleries
 
 -- | Display list of galleries      

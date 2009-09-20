@@ -1,7 +1,7 @@
 module Main where
 
 import Control.Monad
-import Control.Monad.State
+import Control.Monad.Reader
 import Database.HaskellDB.HDBC.SQLite3
 import Happstack.Server
 
@@ -13,5 +13,5 @@ import Dragonfly.ImageGallery.Upload (handleImageUpload)
 
 main :: IO ()
 main = sqliteConnect "website.db" $ \db -> do
-         let st = initialState db
-         simpleHTTP' (\action -> evalStateT action st) (nullConf {port = 9959}) (msum [handleRoot, handleRegistration, handleLogin, handleSignOut, handleImageGallery, handleImageUpload]) 
+         st <- initialState db
+         simpleHTTP' (\action -> runReaderT action st) (nullConf {port = 9959}) (msum [handleRoot, handleRegistration, handleLogin, handleSignOut, handleImageGallery, handleImageUpload]) 

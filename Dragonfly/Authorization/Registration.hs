@@ -5,7 +5,7 @@ module Dragonfly.Authorization.Registration (
                      ) where
 
 import Control.Applicative
-import Control.Applicative.State
+import Control.Monad.Reader
 
 import Data.ByteString.Lazy (unpack)
 import Data.Char (chr)
@@ -41,12 +41,12 @@ cookieExpirationTime = 2 * 3600  -- 2 hours
 
 handleLogin :: MyServerPartT Response
 handleLogin = do
-  ApplicationState db _ <- lift get
+  ApplicationState db _ <- ask
   withForm  loginURL (login db) showErrorsInline completeLogin
 
 handleRegistration :: MyServerPartT Response
 handleRegistration = do
-  ApplicationState db _ <- lift get
+  ApplicationState db _ <- ask
   withForm registerURL (register db) showErrorsInline completeRegistration
 
 login :: Database -> XForm Registration
@@ -62,7 +62,7 @@ loginUser db = input `F.checkM` F.ensureM valid error where
 
 completeLogin :: Registration -> MyServerPartT Response
 completeLogin reg = do
-  ApplicationState db _ <- lift get
+  ApplicationState db _ <- ask
   let u = regUser reg
   let p = regPass reg
   found <- liftIO $ userPasswordMatches u p db
@@ -119,7 +119,7 @@ groupsForUser u db = do
 
 completeRegistration :: Registration -> MyServerPartT Response
 completeRegistration reg = do
-  ApplicationState db _ <- lift get
+  ApplicationState db _ <- ask
   let u = regUser reg
   p <- liftIO $ buildSaltAndHash (regPass reg)
   liftIO $ DB.transaction db (DB.insert db userTable (userName <<- u # password <<- saltToString p # enabled <<- False))
@@ -158,7 +158,7 @@ signIn reg groups = do
   key <- liftIO randomIO
   let c = mkCookie sessionCookie (show key)
   addCookie cookieExpirationTime c
-  lift $ modify $ newSession u groups key
+  newSession u groups key
 
 registeredPage :: String -> String -> X.Html
 registeredPage u continuation = 

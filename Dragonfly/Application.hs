@@ -19,14 +19,10 @@ import Dragonfly.ApplicationState
 import Dragonfly.URISpace
 import Dragonfly.ImageGallery.ImageGallery
 
-import Debug.Trace
-import Control.Monad.State
-
 handleRoot :: MyServerPartT Response
 handleRoot = do
-  ApplicationState _ sess <- lift get
   rq <- askRq
-  let paths = trace ("Root page: " ++ show sess) rqPaths rq
+  let paths = rqPaths rq
   if null paths then do
                   let cookies = rqCookies rq
                   let sc = lookup sessionCookie cookies
