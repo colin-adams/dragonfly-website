@@ -22,8 +22,6 @@ import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
 import Dragonfly.Forms
 
-import Debug.Trace
-
 -- | Handler for imageUploadURL
 handleImageUpload :: MyServerPartT Response 
 handleImageUpload = dir (tail imageUploadURL) $ withSession uploadImagePage loginRequired
@@ -34,7 +32,7 @@ uploadImagePage user = do
   ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
-  trace (show $ galleryTree gs gNames) $ processForm (gallerySelectFormlet (galleryTree gs gNames) Nothing) showErrorsInline uploadImage
+  processForm (gallerySelectFormlet (galleryTree gs gNames) Nothing) showErrorsInline uploadImage
 
 uploadImage :: String -> MyServerPartT Response
 uploadImage name = okHtml $ p << (name ++ " uploaded (well, not really - TODO")
@@ -68,7 +66,7 @@ rootGallery = Gallery "" Nothing "" "" ""
 childTrees :: Maybe String -> [Gallery] -> [String] -> Forest (Gallery, Bool)
 childTrees par galleries authNames =
     let children = filter (\g -> par == parent g && (Dragonfly.ImageGallery.ImageGallery.name g `elem` authNames)) galleries
-    in map (\child -> Node {rootLabel = (child, False), subForest = childTrees (parent child) galleries authNames}) children
+    in map (\child -> Node {rootLabel = (child, False), subForest = childTrees (Just $ Dragonfly.ImageGallery.ImageGallery.name child) galleries authNames}) children
 
 loginRequired :: MyServerPartT Response
 loginRequired = seeOther (encString False ok_url "/?_message=Login required") (toResponse "")
