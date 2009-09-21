@@ -1,6 +1,7 @@
 -- | Form for uploading images
 module Dragonfly.ImageGallery.Upload where
 
+import Control.Applicative
 import Control.Monad.Reader
 
 import qualified Data.Foldable as Fo (foldr)
@@ -11,9 +12,9 @@ import Happstack.Server
 
 import Network.URL
 
-import Text.XHtml.Strict
-import Text.Formlets.MassInput
-import Text.XHtml.Strict.Formlets
+import qualified Text.XHtml.Strict as X
+import Text.XHtml.Strict ((+++), (<<))
+import qualified Text.XHtml.Strict.Formlets as F
 
 import Dragonfly.ApplicationState
 import Dragonfly.Authorization.Auth
@@ -32,41 +33,79 @@ uploadImagePage user = do
   ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
-  processForm (gallerySelectFormlet (galleryTree gs gNames) Nothing) showErrorsInline uploadImage
+  processForm (uploadImageForm gs gNames) showErrorsInline uploadImage
 
-uploadImage :: String -> MyServerPartT Response
-uploadImage name = okHtml $ p << (name ++ " uploaded (well, not really - TODO")
+-- | Gathered form data
+data UploadData = UploadData { 
+      caption :: String,
+      galleryName :: String,
+      imageFile :: F.File
+                             }
+
+-- | Process submitted form
+uploadImage :: UploadData -> MyServerPartT Response
+uploadImage udata = okHtml $ X.p << (galleryName udata ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ ", (well, not really - TODO)")
+
+
+-- | Combined widgets for form
+uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
+uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet (galleryTree gs gNames) Nothing) <*>
+                            imageInputForm
 
 -- | Gallery selection widget builder
-gallerySelectFormlet :: Tree (Gallery, Bool) -> XHtmlFormlet IO String
-gallerySelectFormlet = selectRaw [multiple, size "6"] . mapMaybe gallerySelection . Fo.foldr (augmentedTreeNode (-1)) []
+gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO String
+gallerySelectFormlet = F.selectRaw [X.multiple, X.size "6"] . mapMaybe gallerySelection . Data.Tree.flatten . augmentedTreeNode (-2)
 
--- | Add nesting depth when flattening
-augmentedTreeNode :: Int -> (Gallery, Bool) -> [(Gallery, Bool, Int)] -> [(Gallery, Bool, Int)]
-augmentedTreeNode depth (gallery, selectable) acc =
-    acc ++ [(gallery, selectable, depth)]
+-- | Prompt for picture's title
+titleForm :: XForm String
+titleForm = "Title" `label` F.input Nothing
+
+-- | Prompt for image file
+imageInputForm :: XForm F.File
+imageInputForm = F.plug (\xhtml -> X.p << (X.label << "Image file:") +++ xhtml) F.file
+
+label :: String -> XForm String -> XForm String
+label l = F.plug (\xhtml -> X.p << (X.label << (l ++ ": ") +++ xhtml))
+
+-- | Add nesting depth
+augmentedTreeNode :: Int -> Tree (Gallery, Bool) -> Tree (Gallery, Bool, Int)
+augmentedTreeNode depth (Node (g, selectable) gs) = 
+    Node (g, selectable, depth + 1) (map (augmentedTreeNode (depth + 1)) gs)
 
 -- | Selection-list widget for authorized gallery
-gallerySelection :: (Gallery, Bool, Int) -> Maybe (String, Html)
+gallerySelection :: (Gallery, Bool, Int) -> Maybe (String, X.Html)
 gallerySelection (gallery, selectable, depth) =
     let nm = Dragonfly.ImageGallery.ImageGallery.name gallery 
         hyphens = replicate depth '-'
     in if selectable then
-           Just (nm, p << (hyphens ++ nm))
+           Just (nm, X.p << (hyphens ++ nm))
        else Nothing
 
 -- | Galleries arranged as a tree, with upload authorization status
 galleryTree :: [Gallery] -> [String] -> Tree (Gallery, Bool)
-galleryTree gs authNames = Node {rootLabel = (rootGallery, False), subForest = childTrees Nothing gs authNames}
+galleryTree gs authNames = Node {rootLabel = (rootGallery, False), subForest = childTrees (Just "") gs authNames}
 
 -- | Placeholder for top-level-galleries
 rootGallery :: Gallery
 rootGallery = Gallery "" Nothing "" "" ""
 
+-- | Child galleries for a gallery
 childTrees :: Maybe String -> [Gallery] -> [String] -> Forest (Gallery, Bool)
 childTrees par galleries authNames =
-    let children = filter (\g -> par == parent g && (Dragonfly.ImageGallery.ImageGallery.name g `elem` authNames)) galleries
-    in map (\child -> Node {rootLabel = (child, False), subForest = childTrees (Just $ Dragonfly.ImageGallery.ImageGallery.name child) galleries authNames}) children
+    let children = filter (childGallery par) galleries
+    in map (\child -> Node {rootLabel = (child,  Dragonfly.ImageGallery.ImageGallery.name child `elem` authNames), subForest = childTrees (Just $ Dragonfly.ImageGallery.ImageGallery.name child) galleries authNames}) children
+
+-- | Is gallery a child of par?
+childGallery :: Maybe String ->  Gallery -> Bool
+childGallery par g =
+    case par of 
+      Nothing -> False
+      Just "" -> case parent g of
+                   Nothing -> True
+                   Just _ -> False
+      Just p -> case parent g of
+                  Nothing -> False
+                  Just q -> p == q
 
 loginRequired :: MyServerPartT Response
 loginRequired = seeOther (encString False ok_url "/?_message=Login required") (toResponse "")
