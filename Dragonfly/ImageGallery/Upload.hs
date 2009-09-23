@@ -2,16 +2,19 @@
 module Dragonfly.ImageGallery.Upload where
 
 import Control.Applicative
+import Control.Applicative.Error
 import Control.Monad.Reader
 
+import qualified Data.ByteString.Lazy.UTF8 as LU
 import qualified Data.Foldable as Fo (foldr)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, fromJust)
 import Data.Tree
 
 import Happstack.Server
 
 import Network.URL
 
+import Text.Formlets (runFormState)
 import qualified Text.XHtml.Strict as X
 import Text.XHtml.Strict ((+++), (<<))
 import qualified Text.XHtml.Strict.Formlets as F
@@ -22,6 +25,8 @@ import Dragonfly.Authorization.User
 import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
 import Dragonfly.Forms
+
+import Debug.Trace
 
 -- | Handler for imageUploadURL
 handleImageUpload :: MyServerPartT Response 
@@ -41,13 +46,41 @@ data UploadData = UploadData {
       galleryName :: String,
       imageFile :: F.File
                              }
+-- | Process form for GET and PUT methods
+processForm :: XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
+processForm frm handleErrors handleOk = msum
+  [methodSP GET $ createForm [] frm >>= okHtml
+  , withDataFn ask $ methodSP POST . handleOk' . buildEnvironment
+  ]
+  where
+    handleOk' d = do
+      let (extractor, html, _) = runFormState d frm
+      v <- liftIO extractor  
+      case v of
+        Failure faults -> do 
+          f <- createForm d frm
+          handleErrors f faults
+        Success s      -> handleOk s
+
+-- | Build an environment of form answers from the inputs
+buildEnvironment :: ([(String, Input)], [(String, Cookie)]) -> F.Env
+buildEnvironment (input, _) = 
+    case input of
+      x:y:z:_submit:[] -> [(fst x, Left $  LU.toString $ inputValue $ snd x),
+                           (fst y, Left $ LU.toString $ inputValue $ snd y),
+                           (fst z, f $ snd z)]
+          where f (Input cont fName ctype) = Right $ F.File cont (fromJust fName) (toFormContentType ctype)
+      _ -> trace (show input) []
+
+toFormContentType :: ContentType -> F.ContentType
+toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct)
 
 -- | Process submitted form
 uploadImage :: UploadData -> MyServerPartT Response
 uploadImage udata = okHtml $ X.p << (galleryName udata ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ ", (well, not really - TODO)")
 
 
--- | Combined widgets for form
+-- | Process data from form
 uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
 uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet (galleryTree gs gNames) Nothing) <*>
                             imageInputForm
