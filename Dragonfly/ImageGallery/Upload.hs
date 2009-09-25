@@ -14,7 +14,12 @@ import qualified Data.Foldable as Fo (foldr)
 import Data.Maybe (mapMaybe, fromJust)
 import Data.Tree
 
+import qualified Database.HaskellDB as DB
+import Database.HaskellDB  (Database, (<<-), (#))
+
 import Graphics.GD
+import qualified Graphics.Exif as Exif
+
 import Happstack.Server
 
 import Network.URL
@@ -23,6 +28,8 @@ import Text.Formlets (runFormState)
 import qualified Text.XHtml.Strict as X
 import Text.XHtml.Strict ((+++), (<<))
 import qualified Text.XHtml.Strict.Formlets as F
+
+import qualified Database.ImageTable as IT
 
 import Dragonfly.ApplicationState
 import Dragonfly.Authorization.Auth
@@ -85,12 +92,26 @@ toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct
 uploadImage :: UploadData -> MyServerPartT Response
 uploadImage udata = do
   let imageType = F.ctSubtype (F.contentType (imageFile udata))
+      fname = F.fileName $ imageFile udata
+      fnames = (fname, fname, Just fname) -- TODO
   case imageType of
     "jpeg" -> do
       image <- liftIO $ loadJpegByteString (pack . LB.unpack $ F.content $ imageFile udata)
       liftIO $ saveJpegFile 85 ("files/" ++ (F.fileName $ imageFile udata)) image -- TODO - prompt for quality
+  exif <- liftIO $ Exif.fromFile ("files/" ++ (F.fileName $ imageFile udata))
+  tags <- liftIO $ Exif.allTags exif
+  liftIO $ mapM_ (putStrLn . show) tags
+  ApplicationState db _ <- ask
+  liftIO $ DB.transaction db (saveImageInfo db (caption udata) fnames)
   okHtml $ X.p << (galleryName udata ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
                                    ", content type is " ++ (show (F.contentType (imageFile udata))) ++ ", (well, not really - TODO)")
+
+-- | Save image information to database
+saveImageInfo :: Database -> String -> (String, String, Maybe String) -> IO ()
+saveImageInfo db caption (thumbnailName, previewName, originalName) = do
+  let nextIndex = 1 -- TODO
+  DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # IT.thumbnail <<- thumbnailName # 
+                                IT.preview <<- previewName # IT.original <<- originalName)
 
 
 -- | Process data from form
