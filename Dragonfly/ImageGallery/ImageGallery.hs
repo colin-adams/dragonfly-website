@@ -83,6 +83,7 @@ topLevelGalleries db = do
   return $ map newGallery rs
 
 -- | Contruct a Gallery from its database record
+-- Signature commented out as it needs a really long context.
 --newGallery :: DB.Record vr -> Gallery
 newGallery rec = Gallery (rec DB.! galleryName) (rec DB.! parentGalleryName) (rec DB.! readImageCapabilityName)  (rec DB.! uploadImageCapabilityName)  (rec DB.! administerGalleryCapabilityName) 
 

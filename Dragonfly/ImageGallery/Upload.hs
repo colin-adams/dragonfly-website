@@ -1,15 +1,20 @@
 -- | Form for uploading images
-module Dragonfly.ImageGallery.Upload where
+module Dragonfly.ImageGallery.Upload (
+                                      handleImageUpload
+                                     ) where
 
 import Control.Applicative
 import Control.Applicative.Error
 import Control.Monad.Reader
 
+import Data.ByteString (pack)
 import qualified Data.ByteString.Lazy.UTF8 as LU
+import qualified Data.ByteString.Lazy as LB
 import qualified Data.Foldable as Fo (foldr)
 import Data.Maybe (mapMaybe, fromJust)
 import Data.Tree
 
+import Graphics.GD
 import Happstack.Server
 
 import Network.URL
@@ -72,12 +77,20 @@ buildEnvironment (input, _) =
           where f (Input cont fName ctype) = Right $ F.File cont (fromJust fName) (toFormContentType ctype)
       _ -> trace (show input) []
 
+-- | Convert from Happstack to Formlets ContentType
 toFormContentType :: ContentType -> F.ContentType
 toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct)
 
 -- | Process submitted form
 uploadImage :: UploadData -> MyServerPartT Response
-uploadImage udata = okHtml $ X.p << (galleryName udata ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ ", (well, not really - TODO)")
+uploadImage udata = do
+  let imageType = F.ctSubtype (F.contentType (imageFile udata))
+  case imageType of
+    "jpeg" -> do
+      image <- liftIO $ loadJpegByteString (pack . LB.unpack $ F.content $ imageFile udata)
+      liftIO $ saveJpegFile 85 ("files/" ++ (F.fileName $ imageFile udata)) image -- TODO - prompt for quality
+  okHtml $ X.p << (galleryName udata ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
+                                   ", content type is " ++ (show (F.contentType (imageFile udata))) ++ ", (well, not really - TODO)")
 
 
 -- | Process data from form
@@ -91,11 +104,19 @@ gallerySelectFormlet = F.selectRaw [X.multiple, X.size "6"] . mapMaybe gallerySe
 
 -- | Prompt for picture's title
 titleForm :: XForm String
-titleForm = "Title" `label` F.input Nothing
+titleForm = form `F.check` F.ensure valid error
+    where form = "Title" `label` F.input Nothing
+          valid = not . null
+          error = "Image title must be supplied"
 
 -- | Prompt for image file
 imageInputForm :: XForm F.File
-imageInputForm = F.plug (\xhtml -> X.p << (X.label << "Image file:") +++ xhtml) F.file
+imageInputForm = form `F.check` F.ensure validImageFile error
+    where form = F.plug (\xhtml -> X.p << (X.label << "Image file:") +++ xhtml) F.file
+          error = "Image file must be selected"
+
+validImageFile :: F.File -> Bool
+validImageFile (F.File cont fName ct) = not . null $ fName 
 
 label :: String -> XForm String -> XForm String
 label l = F.plug (\xhtml -> X.p << (X.label << (l ++ ": ") +++ xhtml))
