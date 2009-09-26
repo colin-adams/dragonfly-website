@@ -76,8 +76,6 @@ processForm frm handleErrors handleOk = msum
         Success s      -> handleOk s
 
 -- | Build an environment of form answers from the inputs.
--- This is all wrong - it works OK if the input is valid, but will cause the
---  formlets code to write incorrect error messages otherwise.
 buildEnvironment :: ([(String, Input)], [(String, Cookie)]) -> F.Env
 buildEnvironment (input, _) = 
     let input' = filter noSubmit input
@@ -139,7 +137,7 @@ uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet 
 -- | Gallery selection widget builder
 gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO String
 gallerySelectFormlet tree defaultValue = 
-    list `F.check` F.ensure valid error
+    list `F.checkM` F.ensure valid error
   where list = F.selectRaw [X.multiple, X.size "6"] 
                (mapMaybe gallerySelection . Data.Tree.flatten . augmentedTreeNode (-2) $ tree) 
                defaultValue
