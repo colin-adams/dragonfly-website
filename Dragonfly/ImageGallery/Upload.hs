@@ -38,8 +38,6 @@ import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
 import Dragonfly.Forms
 
-import Debug.Trace
-
 -- | Handler for imageUploadURL
 handleImageUpload :: MyServerPartT Response 
 handleImageUpload = dir (tail imageUploadURL) $ withSession uploadImagePage loginRequired
@@ -82,7 +80,7 @@ buildEnvironment (input, _) =
                            (fst y, Left $ LU.toString $ inputValue $ snd y),
                            (fst z, f $ snd z)]
           where f (Input cont fName ctype) = Right $ F.File cont (fromJust fName) (toFormContentType ctype)
-      _ -> trace (show input) []
+      _ -> []
 
 -- | Convert from Happstack to Formlets ContentType
 toFormContentType :: ContentType -> F.ContentType
@@ -97,10 +95,10 @@ uploadImage udata = do
   case imageType of
     "jpeg" -> do
       image <- liftIO $ loadJpegByteString (pack . LB.unpack $ F.content $ imageFile udata)
-      liftIO $ saveJpegFile 85 ("files/" ++ (F.fileName $ imageFile udata)) image -- TODO - prompt for quality
-  exif <- liftIO $ Exif.fromFile ("files/" ++ (F.fileName $ imageFile udata))
-  tags <- liftIO $ Exif.allTags exif
-  liftIO $ mapM_ (putStrLn . show) tags
+      liftIO $ saveJpegFile 85 ("files/" ++ (F.fileName $ imageFile udata)) image -- TODO - prompt for quality and name
+      exif <- liftIO $ Exif.fromFile ("files/" ++ (F.fileName $ imageFile udata))
+      tags <- liftIO $ Exif.allTags exif
+      liftIO $ mapM_ (putStrLn . show) tags
   ApplicationState db _ <- ask
   liftIO $ DB.transaction db (saveImageInfo db (caption udata) fnames)
   okHtml $ X.p << (galleryName udata ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
@@ -121,7 +119,13 @@ uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet 
 
 -- | Gallery selection widget builder
 gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO String
-gallerySelectFormlet = F.selectRaw [X.multiple, X.size "6"] . mapMaybe gallerySelection . Data.Tree.flatten . augmentedTreeNode (-2)
+gallerySelectFormlet tree defaultValue = 
+    list `F.check` F.ensure valid error
+  where list = F.selectRaw [X.multiple, X.size "6"] 
+               (mapMaybe gallerySelection . Data.Tree.flatten . augmentedTreeNode (-2) $ tree) 
+               defaultValue
+        valid = not . null
+        error = "You must select at least one gallery"
 
 -- | Prompt for picture's title
 titleForm :: XForm String
