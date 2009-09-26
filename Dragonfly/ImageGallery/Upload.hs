@@ -10,6 +10,7 @@ import Control.Monad.Reader
 import Data.ByteString (pack)
 import qualified Data.ByteString.Lazy.UTF8 as LU
 import qualified Data.ByteString.Lazy as LB
+import Data.List (nubBy)
 import qualified Data.Foldable as Fo (foldr)
 import Data.Maybe (mapMaybe, fromJust)
 import Data.Tree
@@ -37,6 +38,8 @@ import Dragonfly.Authorization.User
 import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
 import Dragonfly.Forms
+
+import Debug.Trace
 
 -- | Handler for imageUploadURL
 handleImageUpload :: MyServerPartT Response 
@@ -72,15 +75,31 @@ processForm frm handleErrors handleOk = msum
           handleErrors f faults
         Success s      -> handleOk s
 
--- | Build an environment of form answers from the inputs
+-- | Build an environment of form answers from the inputs.
+-- This is all wrong - it works OK if the input is valid, but will cause the
+--  formlets code to write incorrect error messages otherwise.
 buildEnvironment :: ([(String, Input)], [(String, Cookie)]) -> F.Env
 buildEnvironment (input, _) = 
-    case input of
-      x:y:z:_submit:[] -> [(fst x, Left $  LU.toString $ inputValue $ snd x),
-                           (fst y, Left $ LU.toString $ inputValue $ snd y),
-                           (fst z, f $ snd z)]
-          where f (Input cont fName ctype) = Right $ F.File cont (fromJust fName) (toFormContentType ctype)
-      _ -> []
+    let input' = filter noSubmit input
+        input'' = nubBy sameKey input' 
+    in map toEnvElement input''
+
+toEnvElement :: (String, Input) -> (String, Either String F.File)
+toEnvElement (key, (Input cont fName ctype)) =
+    case key of -- Might be safer to work on content-type
+      "fval[2]" -> (key, Right $ F.File cont (fromJust fName) (toFormContentType ctype))
+      _ -> (key, Left $ LU.toString $ cont)
+
+-- | Are left elements equal?
+sameKey :: (String, Input) -> (String, Input) -> Bool
+sameKey first second = fst first == fst second
+
+-- | Drop submit button
+noSubmit :: (String, Input) -> Bool
+noSubmit (s, _) =
+    case s of
+      "submit" -> False
+      _ -> True
 
 -- | Convert from Happstack to Formlets ContentType
 toFormContentType :: ContentType -> F.ContentType
