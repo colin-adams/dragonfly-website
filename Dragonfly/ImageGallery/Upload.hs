@@ -56,7 +56,7 @@ uploadImagePage user = do
 -- | Gathered form data
 data UploadData = UploadData { 
       caption :: String,
-      galleryName :: String,
+      galleryNames :: [String],
       imageFile :: F.File
                              }
 -- | Process form for GET and PUT methods
@@ -79,19 +79,13 @@ withForm frm handleErrors handleOk = msum
 buildEnvironment :: ([(String, Input)], [(String, Cookie)]) -> F.Env
 buildEnvironment (input, _) = 
     let input' = filter noSubmit input
-        input'' = groupBy sameKey input' 
-        input''' = map head input''
-    in map toEnvElement input'''
+    in map toEnvElement input'
 
 toEnvElement :: (String, Input) -> (String, Either String F.File)
 toEnvElement (key, (Input cont fName ctype)) =
     case fName of
       Just f -> (key, Right $ F.File cont (f) (toFormContentType ctype))
       Nothing -> (key, Left $ LU.toString $ cont)
-
--- | Are left elements equal?
-sameKey :: (String, Input) -> (String, Input) -> Bool
-sameKey first second = fst first == fst second
 
 -- | Drop submit button
 noSubmit :: (String, Input) -> Bool
@@ -119,7 +113,7 @@ uploadImage udata = do
       liftIO $ mapM_ (putStrLn . show) tags
   ApplicationState db _ <- ask
   liftIO $ DB.transaction db (saveImageInfo db (caption udata) fnames)
-  okHtml $ X.p << (galleryName udata ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
+  okHtml $ X.p << (concat (galleryNames udata) ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
                                    ", content type is " ++ (show (F.contentType (imageFile udata))) ++ ", (well, not really - TODO)")
 
 -- | Save image information to database
@@ -132,19 +126,19 @@ saveImageInfo db caption (thumbnailName, previewName, originalName) = do
 
 -- | Process data from form
 uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
-uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet (galleryTree gs gNames) (Just chooseSelection))
+uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet (galleryTree gs gNames) (Just [chooseSelection]))
                             <*> imageInputForm
 
 -- | Gallery selection widget builder
-gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO String
+gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO [String]
 gallerySelectFormlet tree defaultValue = 
     list `F.check` F.ensure valid error
-  where list = F.selectRaw [X.multiple, X.size "6"] 
+  where list = F.selectMultipleRaw 6 [] 
                ((chooseSelection, X.p << chooseSelection) :
                 (mapMaybe gallerySelection . Data.Tree.flatten . augmentedTreeNode (-2) $ tree))
                defaultValue
-        valid = (/= chooseSelection)
-        error = "You must select at least one gallery, ut it must not be " ++ chooseSelection
+        valid = not . (chooseSelection `elem`)
+        error = "You must select at least one gallery, and you may not include " ++ chooseSelection
 
 chooseSelection :: String
 chooseSelection = "<choose one or more galleries>"
