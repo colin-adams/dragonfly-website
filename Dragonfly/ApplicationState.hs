@@ -51,7 +51,7 @@ initialState db = do
 newSession :: String -> [(String, Group)] -> SessionKey -> MyServerPartT ()
 newSession u g k = do
   ApplicationState _ sess <- ask
-  s <- liftIO $ takeMVar $ sess 
+  s <- liftIO $ takeMVar sess 
   let m = unsession s
       m' = M.insert k (User u k g) m
       s' = s {unsession = m'}
