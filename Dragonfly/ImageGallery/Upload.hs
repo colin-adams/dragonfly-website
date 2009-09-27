@@ -18,9 +18,6 @@ import Data.Tree
 import qualified Database.HaskellDB as DB
 import Database.HaskellDB  (Database, (<<-), (#))
 
-import Graphics.GD
-import qualified Graphics.Exif as Exif
-
 import Happstack.Server
 
 import Network.URL
