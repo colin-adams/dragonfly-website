@@ -37,7 +37,7 @@ import Dragonfly.Authorization.Auth
 import Dragonfly.Authorization.User
 import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
-import Dragonfly.Forms hiding (withForm)
+import Dragonfly.Forms
 
 import Debug.Trace
 
@@ -51,7 +51,7 @@ uploadImagePage user = do
   ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
-  withForm (uploadImageForm gs gNames) showErrorsInline uploadImage
+  processForm (uploadImageForm gs gNames) showErrorsInline uploadImage
 
 -- | Gathered form data
 data UploadData = UploadData { 
@@ -59,9 +59,9 @@ data UploadData = UploadData {
       galleryName :: String,
       imageFile :: F.File
                              }
--- | Handle form for both GET and PUT methods
-withForm :: XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
-withForm frm handleErrors handleOk = msum
+-- | Process form for GET and PUT methods
+processForm :: XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
+processForm frm handleErrors handleOk = msum
   [methodSP GET $ createForm [] frm >>= okHtml
   , withDataFn ask $ methodSP POST . handleOk' . buildEnvironment
   ]
@@ -134,22 +134,18 @@ saveImageInfo db caption (thumbnailName, previewName, originalName) = do
 
 -- | Process data from form
 uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
-uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet (galleryTree gs gNames) (Just chooseGalleryInstruction)) <*>
+uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet (galleryTree gs gNames) Nothing) <*>
                             imageInputForm
 
 -- | Gallery selection widget builder
 gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO String
 gallerySelectFormlet tree defaultValue = 
-    list `F.check` F.ensure valid error
+    list `F.checkM` F.ensure valid error
   where list = F.selectRaw [X.multiple, X.size "6"] 
-               ((chooseGalleryInstruction, X.p << chooseGalleryInstruction) :
-                (mapMaybe gallerySelection . Data.Tree.flatten . augmentedTreeNode (-2) $ tree))
+               (mapMaybe gallerySelection . Data.Tree.flatten . augmentedTreeNode (-2) $ tree) 
                defaultValue
-        valid = (fromJust defaultValue /=)
-        error = "You must select at least one gallery, but you may not select " ++ chooseGalleryInstruction
-
-chooseGalleryInstruction :: String
-chooseGalleryInstruction = "<Choose one or more>"
+        valid = not . null
+        error = "You must select at least one gallery"
 
 -- | Prompt for picture's title
 titleForm :: XForm String
