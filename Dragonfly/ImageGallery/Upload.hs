@@ -104,13 +104,13 @@ uploadImage udata = do
   let imageType = F.ctSubtype (F.contentType (imageFile udata))
       fname = F.fileName $ imageFile udata
       fnames = (fname, fname, Just fname) -- TODO
-  case imageType of
-    "jpeg" -> do
-      image <- liftIO $ loadJpegByteString (pack . LB.unpack $ F.content $ imageFile udata)
-      liftIO $ saveJpegFile 85 ("files/" ++ (F.fileName $ imageFile udata)) image -- TODO - prompt for quality and name
-      exif <- liftIO $ Exif.fromFile ("files/" ++ (F.fileName $ imageFile udata))
-      tags <- liftIO $ Exif.allTags exif
-      liftIO $ mapM_ (putStrLn . show) tags
+  liftIO $ LB.writeFile ("files/" ++ (F.fileName $ imageFile udata)) (F.content $ imageFile udata)
+  -- This code is all for retrieval - TODO: need to save the ContentType in the database
+  --case imageType of
+  --  "jpeg" -> do
+  --    exif <- liftIO $ Exif.fromFile ("files/" ++ (F.fileName $ imageFile udata))
+  --    tags <- liftIO $ Exif.allTags exif
+  --    liftIO $ mapM_ (putStrLn . show) tags  
   ApplicationState db _ <- ask
   liftIO $ DB.transaction db (saveImageInfo db (caption udata) fnames)
   okHtml $ X.p << (concat (galleryNames udata) ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
