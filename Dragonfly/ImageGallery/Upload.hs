@@ -41,7 +41,7 @@ import Dragonfly.Forms hiding (withForm)
 
 import Debug.Trace
 
--- | Handler for imageUploadURL
+-- | Handler for imageploadURL
 handleImageUpload :: MyServerPartT Response 
 handleImageUpload = dir (tail imageUploadURL) $ withSession uploadImagePage loginRequired
 
@@ -154,10 +154,18 @@ titleForm = form `F.check` F.ensure valid error
 imageInputForm :: XForm F.File
 imageInputForm = form `F.check` F.ensure validImageFile error
     where form = F.plug (\xhtml -> X.p << (X.label << "Image file:") +++ xhtml) F.file
-          error = "Image file must be selected"
+          error = "A JPEG/GIF/PNG file must be selected"
 
+-- | Is the file an image type supported by Graphics.GD?
 validImageFile :: F.File -> Bool
-validImageFile (F.File cont fName ct) = not . null $ fName 
+validImageFile (F.File cont fName ct) = 
+    case F.ctType ct of
+      "image" -> case F.ctSubtype ct of
+                  "jpeg" -> True
+                  "png" -> True
+                  "gif" -> True
+                  _ -> False
+      _ -> False
 
 label :: String -> XForm String -> XForm String
 label l = F.plug (\xhtml -> X.p << (X.label << (l ++ ": ") +++ xhtml))
