@@ -25,7 +25,7 @@ import Happstack.Server
 
 import Network.URL
 
-import Text.Formlets (runFormState)
+import Text.Formlets (runFormState, FormSelection (..))
 import qualified Text.XHtml.Strict as X
 import Text.XHtml.Strict ((+++), (<<))
 import qualified Text.XHtml.Strict.Formlets as F
@@ -82,11 +82,11 @@ buildEnvironment (input, _) =
         input'' = nubBy sameKey input' 
     in map toEnvElement input''
 
-toEnvElement :: (String, Input) -> (String, Either String F.File)
+toEnvElement :: (String, Input) -> (String, FormSelection)
 toEnvElement (key, (Input cont fName ctype)) =
-    case key of -- Might be safer to work on content-type
-      "fval[2]" -> (key, Right $ F.File cont (fromJust fName) (toFormContentType ctype))
-      _ -> (key, Left $ LU.toString $ cont)
+    case fName of
+      Just f  -> (key, SingleFile $ F.File cont f (toFormContentType ctype))
+      Nothing -> (key, SingleString $ LU.toString $ cont)
 
 -- | Are left elements equal?
 sameKey :: (String, Input) -> (String, Input) -> Bool
