@@ -80,11 +80,13 @@ buildEnvironment :: ([(String, Input)], [(String, Cookie)]) -> F.Env
 buildEnvironment (input, _) = 
     let input' = filter noSubmit input
         input'' = groupBy sameKey input' 
-        input''' = map head input''
+        input''' = map (\x -> (fst . head $ x, map . snd $ x)) input''
+--        input''' = map head input''
     in map toEnvElement input'''
 
-toEnvElement :: (String, Input) -> (String, FormSelection)
-toEnvElement (key, (Input cont fName ctype)) =
+
+toEnvElement :: (String, [Input]) -> (String, FormSelection)
+toEnvElement (key, (Input cont fName ctype):_) =
     case fName of
       Just f  -> (key, SingleFile $ F.File cont f (toFormContentType ctype))
       Nothing -> (key, SingleString $ LU.toString $ cont)
