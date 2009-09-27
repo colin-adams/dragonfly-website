@@ -10,7 +10,7 @@ import Control.Monad.Reader
 import Data.ByteString (pack)
 import qualified Data.ByteString.Lazy.UTF8 as LU
 import qualified Data.ByteString.Lazy as LB
-import Data.List (nubBy)
+import Data.List (groupBy)
 import qualified Data.Foldable as Fo (foldr)
 import Data.Maybe (mapMaybe, fromJust)
 import Data.Tree
@@ -79,8 +79,9 @@ withForm frm handleErrors handleOk = msum
 buildEnvironment :: ([(String, Input)], [(String, Cookie)]) -> F.Env
 buildEnvironment (input, _) = 
     let input' = filter noSubmit input
-        input'' = nubBy sameKey input' 
-    in map toEnvElement input''
+        input'' = groupBy sameKey input' 
+        input''' = map head input''
+    in map toEnvElement input'''
 
 toEnvElement :: (String, Input) -> (String, FormSelection)
 toEnvElement (key, (Input cont fName ctype)) =
