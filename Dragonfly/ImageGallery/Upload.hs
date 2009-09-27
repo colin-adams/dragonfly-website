@@ -25,7 +25,7 @@ import Happstack.Server
 
 import Network.URL
 
-import Text.Formlets (runFormState, FormSelection (..))
+import Text.Formlets (runFormState)
 import qualified Text.XHtml.Strict as X
 import Text.XHtml.Strict ((+++), (<<))
 import qualified Text.XHtml.Strict.Formlets as F
@@ -37,7 +37,7 @@ import Dragonfly.Authorization.Auth
 import Dragonfly.Authorization.User
 import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
-import Dragonfly.Forms
+import Dragonfly.Forms hiding (withForm)
 
 import Debug.Trace
 
@@ -51,7 +51,7 @@ uploadImagePage user = do
   ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
-  processForm (uploadImageForm gs gNames) showErrorsInline uploadImage
+  withForm (uploadImageForm gs gNames) showErrorsInline uploadImage
 
 -- | Gathered form data
 data UploadData = UploadData { 
@@ -60,8 +60,8 @@ data UploadData = UploadData {
       imageFile :: F.File
                              }
 -- | Process form for GET and PUT methods
-processForm :: XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
-processForm frm handleErrors handleOk = msum
+withForm :: XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
+withForm frm handleErrors handleOk = msum
   [methodSP GET $ createForm [] frm >>= okHtml
   , withDataFn ask $ methodSP POST . handleOk' . buildEnvironment
   ]
@@ -80,16 +80,14 @@ buildEnvironment :: ([(String, Input)], [(String, Cookie)]) -> F.Env
 buildEnvironment (input, _) = 
     let input' = filter noSubmit input
         input'' = groupBy sameKey input' 
-        input''' = map (\x -> (fst . head $ x, map . snd $ x)) input''
---        input''' = map head input''
+        input''' = map head input''
     in map toEnvElement input'''
 
-
-toEnvElement :: (String, [Input]) -> (String, FormSelection)
-toEnvElement (key, (Input cont fName ctype):_) =
+toEnvElement :: (String, Input) -> (String, Either String F.File)
+toEnvElement (key, (Input cont fName ctype)) =
     case fName of
-      Just f  -> (key, SingleFile $ F.File cont f (toFormContentType ctype))
-      Nothing -> (key, SingleString $ LU.toString $ cont)
+      Just f -> (key, Right $ F.File cont (f) (toFormContentType ctype))
+      Nothing -> (key, Left $ LU.toString $ cont)
 
 -- | Are left elements equal?
 sameKey :: (String, Input) -> (String, Input) -> Bool
@@ -134,18 +132,22 @@ saveImageInfo db caption (thumbnailName, previewName, originalName) = do
 
 -- | Process data from form
 uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
-uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet (galleryTree gs gNames) Nothing) <*>
-                            imageInputForm
+uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet (galleryTree gs gNames) (Just chooseSelection))
+                            <*> imageInputForm
 
 -- | Gallery selection widget builder
 gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO String
 gallerySelectFormlet tree defaultValue = 
-    list `F.checkM` F.ensure valid error
+    list `F.check` F.ensure valid error
   where list = F.selectRaw [X.multiple, X.size "6"] 
-               (mapMaybe gallerySelection . Data.Tree.flatten . augmentedTreeNode (-2) $ tree) 
+               ((chooseSelection, X.p << chooseSelection) :
+                (mapMaybe gallerySelection . Data.Tree.flatten . augmentedTreeNode (-2) $ tree))
                defaultValue
-        valid = not . null
-        error = "You must select at least one gallery"
+        valid = (/= chooseSelection)
+        error = "You must select at least one gallery, ut it must not be " ++ chooseSelection
+
+chooseSelection :: String
+chooseSelection = "<choose one or more galleries>"
 
 -- | Prompt for picture's title
 titleForm :: XForm String

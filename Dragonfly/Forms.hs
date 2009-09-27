@@ -33,7 +33,7 @@ withForm name frm handleErrors handleOk = dir (tail name) $ msum
           f <- createForm d frm
           handleErrors f faults
         Success s      -> handleOk s
-    simple = List.map (second SingleString)
+    simple = List.map (second Left)
 
 -- | Prepend errors to the rendered form 
 showErrorsInline :: X.Html -> [String] -> MyServerPartT Response
