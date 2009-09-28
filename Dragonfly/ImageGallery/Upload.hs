@@ -1,6 +1,7 @@
 -- | Form for uploading images
 module Dragonfly.ImageGallery.Upload (
-                                      handleImageUpload
+                                      handleImageUpload,
+                                      saveImageInfo -- Delete this - just for debugging
                                      ) where
 
 import Control.Applicative
@@ -21,6 +22,8 @@ import Database.HaskellDB  (Database, (<<-), (#))
 import Happstack.Server
 
 import Network.URL
+
+import System.Time
 
 import Text.Formlets (runFormState)
 import qualified Text.XHtml.Strict as X
@@ -116,9 +119,18 @@ uploadImage udata = do
 -- | Save image information to database
 saveImageInfo :: Database -> String -> (String, String, Maybe String) -> IO ()
 saveImageInfo db caption (thumbnailName, previewName, originalName) = do
-  let nextIndex = 1 -- TODO
+  let q = do
+        t <- DB.table IT.imageTable
+        DB.order [DB.desc t IT.indexNumber]
+        DB.project (IT.indexNumber DB.<< t DB.! IT.indexNumber)
+  rs <- DB.query db q
+  let nextIndex = case null rs of
+                    True -> 1
+                    False -> 1 + (head rs DB.! IT.indexNumber)
+  ct <- getClockTime
+  let time = toUTCTime ct
   DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # IT.thumbnail <<- thumbnailName # 
-                                IT.preview <<- previewName # IT.original <<- originalName)
+                                IT.preview <<- previewName # IT.original <<- originalName # IT.uploadTime <<- time)
 
 
 -- | Process data from form
