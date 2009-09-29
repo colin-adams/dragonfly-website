@@ -13,9 +13,12 @@ import qualified Data.Map as Map
 
 import qualified Database.HaskellDB as DB
 import Database.HaskellDB.Database as DB
-import Database.GalleryTable
+import qualified Database.GalleryTable as GT
+import qualified Database.GalleryImageTable as GIT
 
 import Happstack.Server.SimpleHTTP
+
+import System.Time
 
 import qualified Text.XHtml.Strict as X
 
@@ -32,18 +35,18 @@ data Gallery = Gallery {
       administrationCapabilityName :: String
     } deriving Show
 
--- | All galleries
+-- | All galleries in database
 allGalleries :: Database -> IO [Gallery]
 allGalleries db = do
-  rs <- DB.query db (DB.table galleryTable)
+  rs <- DB.query db (DB.table GT.galleryTable)
   return $ map newGallery rs
 
 -- | All galleries names to which the user can upload images
 authorizedUploadGalleries :: U.User -> Database -> IO [String]
 authorizedUploadGalleries user db = do
-  rs <- DB.query db (DB.table galleryTable)
-  let frs = filter (U.authorizedTo user . (DB.! uploadImageCapabilityName)) rs
-  return $ map (DB.! galleryName) frs
+  rs <- DB.query db (DB.table GT.galleryTable)
+  let frs = filter (U.authorizedTo user . (DB.! GT.uploadImageCapabilityName)) rs
+  return $ map (DB.! GT.galleryName) frs
 
 -- | Html div to invoke image gallery
 divImageGallery :: X.Html
@@ -60,32 +63,72 @@ handleImageGallery = dir (tail imageGalleryURL) $ do
   sess <- liftIO $ readMVar sessions
   galleries <- liftIO $ topLevelGalleries db
   authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sess) galleries
-  ok $ toResponse $ X.body X.<< galleriesDiv authorizedGalleries
+  authorizedGalleryHeadlines <- liftIO $ mapM (readHeadline db) authorizedGalleries
+  ok $ toResponse $ X.body X.<< galleriesDiv authorizedGalleryHeadlines
 
--- | Display list of galleries      
-galleriesDiv :: [Gallery] -> X.Html
+-- | Gallery name, number of pictures, and if non-zero, latest picture, and upload date
+data GalleryHeadline =  GalleryHeadline {gName ::String,             -- ^Name of gallery
+                                         count :: Int,               -- ^Number of pictures (including all in sub-galleries)
+                                         picture :: Maybe (String, CalendarTime) -- ^File name and upload time of latest picture 
+                                        }
+
+-- | Read in sufficient information to form a gallery headline display
+readHeadline :: Database -> Gallery -> IO GalleryHeadline
+readHeadline db gallery = do
+  -- get the list of all (recursive) child gallery names
+  -- first, just the immediate children
+  childNames <- childGalleries db (name gallery)
+  -- now let's try the next level
+  grandchildren <- mapM (childGalleries db) childNames
+  imageNumbers <- mapM (images db) (childNames ++ concat grandchildren)
+  mapM (putStrLn . show) (concat imageNumbers)
+  return $ GalleryHeadline (name gallery) 0 Nothing
+
+-- | Display headline list of galleries      
+galleriesDiv :: [GalleryHeadline] -> X.Html
 galleriesDiv galleries =
-    X.thediv X.<< X.ulist X.<< map displayGallery galleries
+    X.thediv X.<< (X.h1 X.<< "Image galleries" X.+++ X.thediv X.<< map displayGallery galleries)
 
--- | Display one gallery line
-displayGallery :: Gallery -> X.Html
-displayGallery gallery =
- X.li X.<< name gallery
+-- | Display one gallery headline
+displayGallery :: GalleryHeadline -> X.Html
+displayGallery (GalleryHeadline name _ _ ) =
+ X.thediv X.<< name
  
 -- | Get list of all top-level galleries from database
 topLevelGalleries :: Database -> IO [Gallery]
 topLevelGalleries db = do
   let q = do
-        t <- DB.table galleryTable
-        DB.restrict (DB.isNull $ t DB.! parentGalleryName)
+        t <- DB.table GT.galleryTable
+        DB.restrict (DB.isNull $ t DB.! GT.parentGalleryName)
         return t
   rs <- DB.query db q
   return $ map newGallery rs
 
+-- | Get list of names of all immediate child galleries of a named gallery
+childGalleries :: Database -> String -> IO [String]
+childGalleries db gName = do
+  let q = do
+        t <- DB.table GT.galleryTable
+        DB.restrict (t DB.! GT.parentGalleryName DB..==. DB.constJust gName)
+        DB.project (GT.galleryName DB.<<  t DB.! GT.galleryName)
+  rs <- DB.query db q
+  return $ map (DB.! GT.galleryName) rs
+
+-- | get the (non-recursive) image indexNumbers from a given named gallery
+images :: Database -> String -> IO [Integer]
+images db gName = do
+  putStrLn gName
+  let q = do
+        t <- DB.table GIT.galleryImageTable
+        DB.restrict (t DB.! GIT.galleryName DB..==. DB.constant gName)
+        DB.project (GIT.indexNumber DB.<< t DB.! GIT.indexNumber)
+  rs <- DB.query db q
+  return $ map (DB.! GIT.indexNumber) rs
+
 -- | Contruct a Gallery from its database record
 -- Signature commented out as it needs a really long context.
 --newGallery :: DB.Record vr -> Gallery
-newGallery rec = Gallery (rec DB.! galleryName) (rec DB.! parentGalleryName) (rec DB.! readImageCapabilityName)  (rec DB.! uploadImageCapabilityName)  (rec DB.! administerGalleryCapabilityName) 
+newGallery rec = Gallery (rec DB.! GT.galleryName) (rec DB.! GT.parentGalleryName) (rec DB.! GT.readImageCapabilityName)  (rec DB.! GT.uploadImageCapabilityName)  (rec DB.! GT.administerGalleryCapabilityName) 
 
 -- | Check authorization of user to view gallery
 isGalleryAuthorized :: Maybe Cookie -> Sessions -> Gallery -> IO Bool

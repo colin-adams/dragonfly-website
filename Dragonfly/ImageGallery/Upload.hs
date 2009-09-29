@@ -1,7 +1,6 @@
 -- | Form for uploading images
 module Dragonfly.ImageGallery.Upload (
-                                      handleImageUpload,
-                                      saveImageInfo -- Delete this - just for debugging
+                                      handleImageUpload
                                      ) where
 
 import Control.Applicative
@@ -31,6 +30,7 @@ import Text.XHtml.Strict ((+++), (<<))
 import qualified Text.XHtml.Strict.Formlets as F
 
 import qualified Database.ImageTable as IT
+import qualified Database.GalleryImageTable as GIT
 
 import Dragonfly.ApplicationState
 import Dragonfly.Authorization.Auth
@@ -112,13 +112,13 @@ uploadImage udata = do
   --    tags <- liftIO $ Exif.allTags exif
   --    liftIO $ mapM_ (putStrLn . show) tags  
   ApplicationState db _ <- ask
-  liftIO $ DB.transaction db (saveImageInfo db (caption udata) fnames)
+  liftIO $ DB.transaction db (saveImageInfo db (caption udata) (galleryNames udata) fnames)
   okHtml $ X.p << (concat (galleryNames udata) ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
                                    ", content type is " ++ (show (F.contentType (imageFile udata))) ++ ", (well, not really - TODO)")
 
 -- | Save image information to database
-saveImageInfo :: Database -> String -> (String, String, Maybe String) -> IO ()
-saveImageInfo db caption (thumbnailName, previewName, originalName) = do
+saveImageInfo :: Database -> String -> [String] -> (String, String, Maybe String) -> IO ()
+saveImageInfo db caption galleries (thumbnailName, previewName, originalName) = do
   let q = do
         t <- DB.table IT.imageTable
         DB.order [DB.desc t IT.indexNumber]
@@ -127,11 +127,10 @@ saveImageInfo db caption (thumbnailName, previewName, originalName) = do
   let nextIndex = case null rs of
                     True -> 1
                     False -> 1 + (head rs DB.! IT.indexNumber)
-  ct <- getClockTime
-  let time = toUTCTime ct
+  ct <- getClockTime >>= toCalendarTime
   DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # IT.thumbnail <<- thumbnailName # 
-                                IT.preview <<- previewName # IT.original <<- originalName # IT.uploadTime <<- time)
-
+                                IT.preview <<- previewName # IT.original <<- originalName # IT.uploadTime <<- ct)
+  mapM_ (\name -> DB.insert db GIT.galleryImageTable (GIT.galleryName <<- name # GIT.indexNumber <<- nextIndex)) galleries
 
 -- | Process data from form
 uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
