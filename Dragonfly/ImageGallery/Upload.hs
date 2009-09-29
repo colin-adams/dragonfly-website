@@ -127,9 +127,10 @@ saveImageInfo db caption galleries (thumbnailName, previewName, originalName) = 
   let nextIndex = case null rs of
                     True -> 1
                     False -> 1 + (head rs DB.! IT.indexNumber)
-  ct <- getClockTime >>= toCalendarTime
+  ct <- getClockTime 
+  let utc = toUTCTime ct
   DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # IT.thumbnail <<- thumbnailName # 
-                                IT.preview <<- previewName # IT.original <<- originalName # IT.uploadTime <<- ct)
+                                IT.preview <<- previewName # IT.original <<- originalName # IT.uploadTime <<- utc)
   mapM_ (\name -> DB.insert db GIT.galleryImageTable (GIT.galleryName <<- name # GIT.indexNumber <<- nextIndex)) galleries
 
 -- | Process data from form

@@ -9,6 +9,7 @@ module Dragonfly.ImageGallery.ImageGallery (
 import Control.Monad.Reader
 import Control.Concurrent.MVar
 
+import Data.List (nub)
 import qualified Data.Map as Map
 import Data.Tree
 
@@ -16,6 +17,7 @@ import qualified Database.HaskellDB as DB
 import Database.HaskellDB.Database as DB
 import qualified Database.GalleryTable as GT
 import qualified Database.GalleryImageTable as GIT
+import qualified Database.ImageTable as IT
 
 import Happstack.Server.SimpleHTTP
 
@@ -79,8 +81,25 @@ readHeadline db gallery = do
   -- get the list of all (recursive) child gallery names
   gNames <- unfoldTreeM_BF (childGalleries db) (name gallery)
   imageNumbers <- mapM (images db) (Data.Tree.flatten gNames)
-  mapM (putStrLn . show) (concat imageNumbers)
-  return $ GalleryHeadline (name gallery) 0 Nothing
+  let indices = nub (concat imageNumbers)
+  recentUpload <- mostRecentImage db indices
+  return $ GalleryHeadline (name gallery) (length indices) recentUpload
+
+-- | Most recent thumbnail-image from list
+mostRecentImage :: Database -> [Integer] -> IO (Maybe (String, CalendarTime))
+mostRecentImage db indices = do
+  case null indices of
+    True -> return Nothing
+    False -> do
+      let q = do
+              t <- DB.table IT.imageTable
+              DB.restrict (t DB.! IT.indexNumber `DB._in` (map DB.constant indices))
+              DB.order [DB.desc t IT.uploadTime]
+              DB.top 1
+              DB.project (IT.thumbnail DB.<< t DB.! IT.thumbnail DB.# IT.uploadTime DB.<< t DB.! IT.uploadTime)
+      putStrLn $ DB.showSql q
+      rs <- DB.query db q
+      return $ Just ((head rs) DB.! IT.thumbnail, (head rs) DB.! IT.uploadTime)
 
 -- | Display headline list of galleries      
 galleriesDiv :: [GalleryHeadline] -> X.Html
