@@ -10,6 +10,7 @@ import Control.Monad.Reader
 import Control.Concurrent.MVar
 
 import qualified Data.Map as Map
+import Data.Tree
 
 import qualified Database.HaskellDB as DB
 import Database.HaskellDB.Database as DB
@@ -76,11 +77,8 @@ data GalleryHeadline =  GalleryHeadline {gName ::String,             -- ^Name of
 readHeadline :: Database -> Gallery -> IO GalleryHeadline
 readHeadline db gallery = do
   -- get the list of all (recursive) child gallery names
-  -- first, just the immediate children
-  childNames <- childGalleries db (name gallery)
-  -- now let's try the next level
-  grandchildren <- mapM (childGalleries db) childNames
-  imageNumbers <- mapM (images db) (childNames ++ concat grandchildren)
+  gNames <- unfoldTreeM_BF (childGalleries db) (name gallery)
+  imageNumbers <- mapM (images db) (Data.Tree.flatten gNames)
   mapM (putStrLn . show) (concat imageNumbers)
   return $ GalleryHeadline (name gallery) 0 Nothing
 
@@ -105,14 +103,14 @@ topLevelGalleries db = do
   return $ map newGallery rs
 
 -- | Get list of names of all immediate child galleries of a named gallery
-childGalleries :: Database -> String -> IO [String]
+childGalleries :: Database -> String -> IO (String, [String])
 childGalleries db gName = do
   let q = do
         t <- DB.table GT.galleryTable
         DB.restrict (t DB.! GT.parentGalleryName DB..==. DB.constJust gName)
         DB.project (GT.galleryName DB.<<  t DB.! GT.galleryName)
   rs <- DB.query db q
-  return $ map (DB.! GT.galleryName) rs
+  return $ (gName, map (DB.! GT.galleryName) rs)
 
 -- | get the (non-recursive) image indexNumbers from a given named gallery
 images :: Database -> String -> IO [Integer]
