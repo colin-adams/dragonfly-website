@@ -62,9 +62,8 @@ handleImages :: MyServerPartT Response
 handleImages = do
                  rq <- askRq
                  let paths = rqPaths rq
-                 case null paths of
-                   True -> mzero
-                   False -> fileServeStrict [] ("/home/colin/dragonfly-website/files/" ++ last paths)
+                 if null paths then mzero else
+                     fileServeStrict [] ("/home/colin/dragonfly-website/files/" ++ last paths)
 
 -- | Handler for imageGalleryURL
 handleImageGallery :: MyServerPartT Response 
@@ -98,18 +97,16 @@ readHeadline db gallery = do
 
 -- | Most recent thumbnail-image from list
 mostRecentImage :: Database -> [Integer] -> IO (Maybe (String, CalendarTime))
-mostRecentImage db indices = do
-  case null indices of
-    True -> return Nothing
-    False -> do
-      let q = do
-              t <- DB.table IT.imageTable
-              DB.restrict (t DB.! IT.indexNumber `DB._in` (map DB.constant indices))
-              DB.order [DB.desc t IT.uploadTime]
-              DB.top 1
-              DB.project (IT.thumbnail DB.<< t DB.! IT.thumbnail DB.# IT.uploadTime DB.<< t DB.! IT.uploadTime)
-      rs <- DB.query db q
-      return $ Just ((head rs) DB.! IT.thumbnail, (head rs) DB.! IT.uploadTime)
+mostRecentImage db indices =
+  if null indices then return Nothing else
+      do let q 
+                 = do t <- DB.table IT.imageTable
+                      DB.restrict (t DB.! IT.indexNumber `DB._in` map DB.constant indices)
+                      DB.order [DB.desc t IT.uploadTime]
+                      DB.top 1
+                      DB.project (IT.thumbnail DB.<< t DB.! IT.thumbnail DB.# IT.uploadTime DB.<< t DB.! IT.uploadTime)
+         rs <- DB.query db q
+         return $ Just (head rs DB.! IT.thumbnail, head rs DB.! IT.uploadTime)
 
 -- | Display headline list of galleries      
 galleriesDiv :: [GalleryHeadline] -> X.Html
@@ -124,7 +121,7 @@ displayGallery (GalleryHeadline name count picture) =
     0 -> X.p X.<< "There are no pictures in this gallery"
     _ -> case picture of
           Just (image, date) -> ((X.image X.! [X.src image]) X.+++ (X.p X.<< 
-                                                                        ("Last updated: " ++ ((calendarTimeToString date ++ "UTC")))))
+                                                                        ("Last updated: " ++ (calendarTimeToString date ++ "UTC"))))
 
 -- | Get list of all top-level galleries from database
 topLevelGalleries :: Database -> IO [Gallery]
@@ -144,7 +141,7 @@ childGalleries db gName = do
         DB.restrict (t DB.! GT.parentGalleryName DB..==. DB.constJust gName)
         DB.project (GT.galleryName DB.<<  t DB.! GT.galleryName)
   rs <- DB.query db q
-  return $ (gName, map (DB.! GT.galleryName) rs)
+  return (gName, map (DB.! GT.galleryName) rs)
 
 -- | get the (non-recursive) image indexNumbers from a given named gallery
 images :: Database -> String -> IO [Integer]
