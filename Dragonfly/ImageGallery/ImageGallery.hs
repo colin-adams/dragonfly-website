@@ -3,7 +3,8 @@ module Dragonfly.ImageGallery.ImageGallery (
                                             authorizedUploadGalleries,
                                             allGalleries,
                                             divImageGallery,
-                                            handleImageGallery
+                                            handleImageGallery,
+                                            handleImages
                                            ) where
 
 import Control.Monad.Reader
@@ -20,6 +21,7 @@ import qualified Database.GalleryImageTable as GIT
 import qualified Database.ImageTable as IT
 
 import Happstack.Server.SimpleHTTP
+import Happstack.Server.HTTP.FileServe
 
 import System.Time
 
@@ -54,6 +56,15 @@ authorizedUploadGalleries user db = do
 -- | Html div to invoke image gallery
 divImageGallery :: X.Html
 divImageGallery = X.thediv X.<< (X.anchor X.! [X.href imageGalleryURL] X.<< "Image gallery")
+
+-- | Handler for images
+handleImages :: MyServerPartT Response 
+handleImages = do
+                 rq <- askRq
+                 let paths = rqPaths rq
+                 case null paths of
+                   True -> mzero
+                   False -> fileServeStrict [] ("/home/colin/dragonfly-website/files/" ++ last paths)
 
 -- | Handler for imageGalleryURL
 handleImageGallery :: MyServerPartT Response 
@@ -97,7 +108,6 @@ mostRecentImage db indices = do
               DB.order [DB.desc t IT.uploadTime]
               DB.top 1
               DB.project (IT.thumbnail DB.<< t DB.! IT.thumbnail DB.# IT.uploadTime DB.<< t DB.! IT.uploadTime)
-      putStrLn $ DB.showSql q
       rs <- DB.query db q
       return $ Just ((head rs) DB.! IT.thumbnail, (head rs) DB.! IT.uploadTime)
 
@@ -108,9 +118,14 @@ galleriesDiv galleries =
 
 -- | Display one gallery headline
 displayGallery :: GalleryHeadline -> X.Html
-displayGallery (GalleryHeadline name _ _ ) =
- X.thediv X.<< name
- 
+displayGallery (GalleryHeadline name count picture) =
+ X.thediv X.<< name X.+++
+  case count of
+    0 -> X.p X.<< "There are no pictures in this gallery"
+    _ -> case picture of
+          Just (image, date) -> ((X.image X.! [X.src image]) X.+++ (X.p X.<< 
+                                                                        ("Last updated: " ++ ((calendarTimeToString date ++ "UTC")))))
+
 -- | Get list of all top-level galleries from database
 topLevelGalleries :: Database -> IO [Gallery]
 topLevelGalleries db = do
@@ -134,7 +149,6 @@ childGalleries db gName = do
 -- | get the (non-recursive) image indexNumbers from a given named gallery
 images :: Database -> String -> IO [Integer]
 images db gName = do
-  putStrLn gName
   let q = do
         t <- DB.table GIT.galleryImageTable
         DB.restrict (t DB.! GIT.galleryName DB..==. DB.constant gName)

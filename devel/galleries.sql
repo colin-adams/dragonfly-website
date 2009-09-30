@@ -1,3 +1,4 @@
+alter table imagetable alter column uploadtime type timestamp with time zone;
 insert into galleryTable values ('Nature', Null, 'readGalleryCapability', 'uploadImageCapability', 'administerGalleryCapability');
 insert into galleryTable values ('Donkey shit', Null, 'forbidden', 'forbidden', 'administerGalleryCapability');
 insert into galleryTable values ('Dragonflies', 'Nature', 'readGalleryCapability', 'uploadImageCapability', 'administerGalleryCapability');

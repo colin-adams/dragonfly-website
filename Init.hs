@@ -4,7 +4,7 @@
 -- | Then run it, supplying a name and password for the (or a principal) adminstrator
 module Main (main) where
 
-import Database.HaskellDB.HDBC.SQLite3
+import Database.HaskellDB.HDBC.PostgreSQL
 import Database.HaskellDB
 import Database.HaskellDB.Database
 import Database.UserTable
@@ -45,7 +45,7 @@ initialize :: [Options -> Options] -> IO ()
 initialize options = case length options of
     2 -> do
       let opts = foldl (flip id) defaultOptions options
-      sqliteConnect "website.db" $ \db -> do
+      postgresqlConnect [] $ \db -> do
                         addAdministrator (name opts) (passwd opts) db
                         return ()
     _ -> usage ["Exactly 2 options must be supplied"]

@@ -6,7 +6,7 @@ import Database.HaskellDB.DBSpec.DBSpecToDBDirect
 import Database.HaskellDB.DBSpec.DBSpecToDatabase
 import Database.HaskellDB.DBSpec.DBInfo
 import Database.HaskellDB.DBSpec.PPHelpers
-import Database.HaskellDB.HDBC.SQLite3
+import Database.HaskellDB.HDBC.PostgreSQL
 
 -- | Database used throughout the website
 database :: DBInfo
@@ -104,6 +104,6 @@ main :: IO ()
 main = do
   -- Generate the Haskell module for use in the application
   dbInfoToModuleFiles "" "Database" database
-
-  -- Generate the sqlite3 database
-  sqliteConnect "website.db" $ \db -> dbSpecToDatabase db database
+                      
+  -- Generate the database
+  postgresqlConnect [] $ \db -> dbSpecToDatabase db database
