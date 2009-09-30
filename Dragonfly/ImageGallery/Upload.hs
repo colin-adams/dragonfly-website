@@ -113,14 +113,7 @@ uploadImage udata = do
       previewName = toPreview fname
       fnames = (thumbnailName, previewName, fname)
   liftIO $ LB.writeFile ("files/" ++ (F.fileName $ imageFile udata)) (F.content $ imageFile udata)
-  -- This code is all for retrieval 
-  --case imageType of
-  --  "jpeg" -> do
-  --    exif <- liftIO $ Exif.fromFile ("files/" ++ (F.fileName $ imageFile udata))
-  --    tags <- liftIO $ Exif.allTags exif
-  --    liftIO $ mapM_ (putStrLn . show) tags  
   ApplicationState db _ <- ask
-  -- TODO: need to save the ContentType in the database
   liftIO $ DB.transaction db (saveImageInfo db (caption udata) (galleryNames udata) imageType fnames)
   liftIO $ LB.writeFile (imageDirectory ++ fname) (F.content $ imageFile udata)
   case imageType of

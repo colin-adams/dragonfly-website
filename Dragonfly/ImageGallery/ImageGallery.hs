@@ -123,11 +123,21 @@ galleriesDiv galleries =
 displayGallery :: GalleryHeadline -> X.Html
 displayGallery (GalleryHeadline name count picture) =
  X.thediv X.<< name X.+++
-  case count of
-    0 -> X.p X.<< "There are no pictures in this gallery"
-    _ -> case picture of
-          Just (image, date) -> ((X.image X.! [X.src image]) X.+++ (X.p X.<< 
-                                                                        ("Last updated: " ++ (calendarTimeToString date ++ "UTC"))))
+  let toBe = case count of
+               1 -> "is "
+               _ -> "are "
+      pictureNoun = case count of
+                      1 -> " picture"
+                      _ -> " pictures"
+  in case count of
+       0 -> X.p X.<< "There are no pictures in this gallery"
+       _ -> case picture of
+             Just (image, date) -> ((X.image X.! [X.src image]) X.+++
+                                                               X.p X.<< ("There " ++ toBe ++ (show count) ++ pictureNoun ++ 
+                                                                    " in this gallery")
+                                                               X.+++ (X.p X.<< 
+                                                                      ("Last updated: " 
+                                                                       ++ (calendarTimeToString date ++ "UTC"))))
 
 -- | Get list of all top-level galleries from database
 topLevelGalleries :: Database -> IO [Gallery]
