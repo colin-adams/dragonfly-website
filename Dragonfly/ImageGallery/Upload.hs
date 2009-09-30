@@ -121,9 +121,8 @@ uploadImage udata = do
   --    liftIO $ mapM_ (putStrLn . show) tags  
   ApplicationState db _ <- ask
   -- TODO: need to save the ContentType in the database
-  liftIO $ DB.transaction db (saveImageInfo db (caption udata) (galleryNames udata) fnames)
+  liftIO $ DB.transaction db (saveImageInfo db (caption udata) (galleryNames udata) imageType fnames)
   liftIO $ LB.writeFile (imageDirectory ++ fname) (F.content $ imageFile udata)
-  -- TODO - use GD to write thumbnail and preview. EXIF data will always be read from original
   case imageType of
     "jpeg" -> do
       image <- liftIO $ loadJpegFile (imageDirectory ++ fname)
@@ -132,19 +131,13 @@ uploadImage udata = do
       liftIO $ saveJpegFile 85 (imageDirectory ++ previewName) previewImage
       thumbnailImage <- liftIO $ resizeImage 120 80 image
       liftIO $ saveJpegFile 70 (imageDirectory ++ thumbnailName) thumbnailImage
-  -- This code is all for retrieval - TODO: need to save the ContentType in the database
-  --case imageType of
-  --  "jpeg" -> do
-  --    exif <- liftIO $ Exif.fromFile ("files/" ++ (F.fileName $ imageFile udata))
-  --    tags <- liftIO $ Exif.allTags exif
-  --    liftIO $ mapM_ (putStrLn . show) tags  
-
+  -- TODO - display preview page
   okHtml $ X.p << (concat (galleryNames udata) ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
                                    ", content type is " ++ (show (F.contentType (imageFile udata))) ++ ", (well, not really - TODO)")
 
 -- | Save image information to database
-saveImageInfo :: Database -> String -> [String] -> (String, String, String) -> IO ()
-saveImageInfo db caption galleries (thumbnailName, previewName, originalName) = do
+saveImageInfo :: Database -> String -> [String] -> String -> (String, String, String) -> IO ()
+saveImageInfo db caption galleries imageType (thumbnailName, previewName, originalName) = do
   let q = do
         t <- DB.table IT.imageTable
         DB.order [DB.desc t IT.indexNumber]
@@ -156,7 +149,8 @@ saveImageInfo db caption galleries (thumbnailName, previewName, originalName) = 
   ct <- getClockTime 
   let utc = toUTCTime ct
   DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # IT.thumbnail <<- thumbnailName # 
-                                IT.preview <<- previewName # IT.original <<- originalName # IT.uploadTime <<- utc)
+                                IT.preview <<- previewName # 
+                                IT.original <<- originalName # IT.uploadTime <<- utc # IT.imageType <<- imageType)
   mapM_ (\name -> DB.insert db GIT.galleryImageTable (GIT.galleryName <<- name # GIT.indexNumber <<- nextIndex)) galleries
 
 -- | Process data from form
