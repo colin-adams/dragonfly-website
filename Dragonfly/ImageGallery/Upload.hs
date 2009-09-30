@@ -1,6 +1,7 @@
 -- | Form for uploading images
 module Dragonfly.ImageGallery.Upload (
-                                      handleImageUpload
+                                      handleImageUpload,
+                                      imageDirectory
                                      ) where
 
 import Control.Applicative
@@ -18,10 +19,15 @@ import Data.Tree
 import qualified Database.HaskellDB as DB
 import Database.HaskellDB  (Database, (<<-), (#))
 
+import Directory (doesFileExist)
+
+import Graphics.GD
+
 import Happstack.Server
 
 import Network.URL
 
+import System.FilePath.Posix (splitExtension)
 import System.Time
 
 import Text.Formlets (runFormState)
@@ -102,8 +108,8 @@ toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct
 uploadImage :: UploadData -> MyServerPartT Response
 uploadImage udata = do
   let imageType = F.ctSubtype (F.contentType (imageFile udata))
-      fname = F.fileName $ imageFile udata
-      fnames = (fname, fname, Just fname) -- TODO
+  fname <- liftIO $ toOriginal $ F.fileName $ imageFile udata
+  let fnames = (toThumbnail fname, toPreview fname, fname)
   liftIO $ LB.writeFile ("files/" ++ (F.fileName $ imageFile udata)) (F.content $ imageFile udata)
   -- This code is all for retrieval - TODO: need to save the ContentType in the database
   --case imageType of
@@ -113,11 +119,21 @@ uploadImage udata = do
   --    liftIO $ mapM_ (putStrLn . show) tags  
   ApplicationState db _ <- ask
   liftIO $ DB.transaction db (saveImageInfo db (caption udata) (galleryNames udata) fnames)
+  liftIO $ LB.writeFile (imageDirectory ++ fname) (F.content $ imageFile udata)
+  -- TODO - use GD to write thumbnail and preview. EXIF data will always be read from original
+
+  -- This code is all for retrieval - TODO: need to save the ContentType in the database
+  --case imageType of
+  --  "jpeg" -> do
+  --    exif <- liftIO $ Exif.fromFile ("files/" ++ (F.fileName $ imageFile udata))
+  --    tags <- liftIO $ Exif.allTags exif
+  --    liftIO $ mapM_ (putStrLn . show) tags  
+
   okHtml $ X.p << (concat (galleryNames udata) ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
                                    ", content type is " ++ (show (F.contentType (imageFile udata))) ++ ", (well, not really - TODO)")
 
 -- | Save image information to database
-saveImageInfo :: Database -> String -> [String] -> (String, String, Maybe String) -> IO ()
+saveImageInfo :: Database -> String -> [String] -> (String, String, String) -> IO ()
 saveImageInfo db caption galleries (thumbnailName, previewName, originalName) = do
   let q = do
         t <- DB.table IT.imageTable
@@ -221,3 +237,25 @@ childGallery par g =
 
 loginRequired :: MyServerPartT Response
 loginRequired = seeOther (encString False ok_url "/?_message=Login required") (toResponse "")
+
+-- | Convert (possibly modified) original file name to a thumbnail name
+toThumbnail :: String -> String
+toThumbnail original =
+    let (base, ext) = splitExtension original
+    in base ++ "_thumbnail" ++ ext
+
+-- | Convert (possibly modified) original file name to a preview name
+toPreview :: String -> String
+toPreview original =
+    let (base, ext) = splitExtension original
+    in base ++ "_preview" ++ ext
+
+-- | Convert original file name so it doesn't clash with an existing one
+toOriginal :: String -> IO String
+toOriginal fname = do
+  exists <- doesFileExist (imageDirectory ++ fname)
+  if exists then
+      do
+        let (base, ext) = splitExtension fname
+        toOriginal (base ++ "0" ++ ext)
+      else return fname

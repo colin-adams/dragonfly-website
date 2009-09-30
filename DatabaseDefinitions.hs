@@ -95,7 +95,7 @@ previewColumn :: CInfo
 previewColumn = CInfo {cname = "preview", descr = (StringT, False)}
 
 originalColumn :: CInfo
-originalColumn = CInfo {cname = "original", descr = (StringT, True)}
+originalColumn = CInfo {cname = "original", descr = (StringT, False)}
 
 uploadTimeColumn :: CInfo
 uploadTimeColumn = CInfo {cname = "uploadTime", descr = (CalendarTimeT, False)}

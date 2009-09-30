@@ -4,7 +4,8 @@ module Dragonfly.ImageGallery.ImageGallery (
                                             allGalleries,
                                             divImageGallery,
                                             handleImageGallery,
-                                            handleImages
+                                            handleImages,
+                                            imageDirectory
                                            ) where
 
 import Control.Monad.Reader
@@ -31,6 +32,10 @@ import Dragonfly.ApplicationState
 import qualified Dragonfly.Authorization.Authorities as Auth
 import Dragonfly.URISpace (imageGalleryURL)
 import qualified Dragonfly.Authorization.User as U
+
+-- | File-system directory where uploaded images are stored
+imageDirectory :: String
+imageDirectory = "/home/colin/dragonfly-website/files/"
 
 data Gallery = Gallery {
       name :: String,
@@ -63,7 +68,8 @@ handleImages = do
                  rq <- askRq
                  let paths = rqPaths rq
                  if null paths then mzero else
-                     fileServeStrict [] ("/home/colin/dragonfly-website/files/" ++ last paths)
+                     do
+                       fileServeStrict [] imageDirectory
 
 -- | Handler for imageGalleryURL
 handleImageGallery :: MyServerPartT Response 
