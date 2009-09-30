@@ -109,19 +109,29 @@ uploadImage :: UploadData -> MyServerPartT Response
 uploadImage udata = do
   let imageType = F.ctSubtype (F.contentType (imageFile udata))
   fname <- liftIO $ toOriginal $ F.fileName $ imageFile udata
-  let fnames = (toThumbnail fname, toPreview fname, fname)
+  let thumbnailName = toThumbnail fname
+      previewName = toPreview fname
+      fnames = (thumbnailName, previewName, fname)
   liftIO $ LB.writeFile ("files/" ++ (F.fileName $ imageFile udata)) (F.content $ imageFile udata)
-  -- This code is all for retrieval - TODO: need to save the ContentType in the database
+  -- This code is all for retrieval 
   --case imageType of
   --  "jpeg" -> do
   --    exif <- liftIO $ Exif.fromFile ("files/" ++ (F.fileName $ imageFile udata))
   --    tags <- liftIO $ Exif.allTags exif
   --    liftIO $ mapM_ (putStrLn . show) tags  
   ApplicationState db _ <- ask
+  -- TODO: need to save the ContentType in the database
   liftIO $ DB.transaction db (saveImageInfo db (caption udata) (galleryNames udata) fnames)
   liftIO $ LB.writeFile (imageDirectory ++ fname) (F.content $ imageFile udata)
   -- TODO - use GD to write thumbnail and preview. EXIF data will always be read from original
-
+  case imageType of
+    "jpeg" -> do
+      image <- liftIO $ loadJpegFile (imageDirectory ++ fname)
+      -- TODO - constants for sizes and quality 
+      previewImage <- liftIO $ resizeImage 640 400 image
+      liftIO $ saveJpegFile 85 (imageDirectory ++ previewName) previewImage
+      thumbnailImage <- liftIO $ resizeImage 120 80 image
+      liftIO $ saveJpegFile 70 (imageDirectory ++ thumbnailName) thumbnailImage
   -- This code is all for retrieval - TODO: need to save the ContentType in the database
   --case imageType of
   --  "jpeg" -> do
