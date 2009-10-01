@@ -5,7 +5,9 @@ module Dragonfly.ImageGallery.ImageGallery (
                                             divImageGallery,
                                             handleImageGallery,
                                             handleImages,
-                                            imageDirectory
+                                            imageDirectory,
+                                            displayPreview,
+                                            exifData
                                            ) where
 
 import Control.Monad.Reader
@@ -20,6 +22,8 @@ import Database.HaskellDB.Database as DB
 import qualified Database.GalleryTable as GT
 import qualified Database.GalleryImageTable as GIT
 import qualified Database.ImageTable as IT
+
+import Graphics.Exif
 
 import Happstack.Server.SimpleHTTP
 import Happstack.Server.HTTP.FileServe
@@ -44,6 +48,45 @@ data Gallery = Gallery {
       uploadCapabilityName :: String,
       administrationCapabilityName :: String
     } deriving Show
+
+-- | Display preview picture and EXIF information
+displayPreview :: String -> String -> [(String, String)] -> X.Html
+displayPreview caption previewName exif =
+    (X.h1 X.<< caption) 
+    X.+++ X.thediv X.<< X.image X.! [X.src previewName]
+    X.+++ (exifDiv exif)
+
+-- | All interpretable EXIF data for fname                            
+-- currently excludes MakerNote
+exifData :: String -> IO [(String, String)]
+exifData fname = fromFile (imageDirectory ++ fname) >>= allTags
+
+-- | Display selected EXIF data as XHtml
+exifDiv :: [(String, String)] -> X.Html
+exifDiv tags = 
+    let fN = lookup fNumber tags
+        pairs = [(fNumberI, fN)]
+    in X.thediv X.<< tagTable pairs
+   
+-- | XHtml table of Exif information
+tagTable :: [(String, Maybe String)] -> X.Html
+tagTable tags = 
+    X.table X.<< X.tbody X.<< (map tagDisplay tags)
+
+-- | XHtml fragment to display a tag    
+tagDisplay :: (String, Maybe String) -> X.Html
+tagDisplay (tag, value) =
+    case value of
+      Nothing -> X.noHtml
+      Just v -> X.tr X.<< ((X.td X.<< tag) X.+++ (X.td X.<< v))
+
+-- | EXIF tag
+fNumber :: String        
+fNumber = "FNumber"
+
+-- | EXIF interpretation
+fNumberI :: String        
+fNumberI = "Aperture"
 
 -- | All galleries in database
 allGalleries :: Database -> IO [Gallery]

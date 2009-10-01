@@ -124,9 +124,8 @@ uploadImage udata = do
       liftIO $ saveJpegFile 85 (imageDirectory ++ previewName) previewImage
       thumbnailImage <- liftIO $ resizeImage 120 80 image
       liftIO $ saveJpegFile 70 (imageDirectory ++ thumbnailName) thumbnailImage
-  -- TODO - display preview page
-  okHtml $ X.p << (concat (galleryNames udata) ++ " uploaded with title " ++ caption udata ++ ", image file name is " ++ (F.fileName $ imageFile udata) ++ 
-                                   ", content type is " ++ (show (F.contentType (imageFile udata))) ++ ", (well, not really - TODO)")
+  exif <- liftIO $ exifData fname
+  trace (show exif) okHtml $ displayPreview (caption udata) previewName exif
 
 -- | Save image information to database
 saveImageInfo :: Database -> String -> [String] -> String -> (String, String, String) -> IO ()
