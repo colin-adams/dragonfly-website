@@ -134,10 +134,10 @@ displayGallery (GalleryHeadline name count picture) =
        _ -> case picture of
              Just (image, date) -> ((X.image X.! [X.src image]) X.+++
                                                                X.p X.<< ("There " ++ toBe ++ (show count) ++ pictureNoun ++ 
-                                                                    " in this gallery")
+                                                                    " in this gallery.")
                                                                X.+++ (X.p X.<< 
                                                                       ("Last updated: " 
-                                                                       ++ (calendarTimeToString date ++ "UTC"))))
+                                                                       ++ (calendarTimeToString date ++ " UTC"))))
 
 -- | Get list of all top-level galleries from database
 topLevelGalleries :: Database -> IO [Gallery]

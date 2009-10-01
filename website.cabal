@@ -1,0 +1,34 @@
+name:                website
+version:             1.0.0.0
+homepage:            http://github.com/colin-adams/dragonfly-website
+license:             GPL
+license-file:        LICENSE
+author:              Colin Adams
+maintainer:          colin@colina.demon.co.uk
+category:            Web
+synopsis:            Replacement for Drupal to run Colin's "Dragonflies on Dragonfly BSD" website
+description:         Website is a program to run a website. Specifically
+                     it is to run the website "Dragonflies on Dragonfly BSD", which
+                     was previously run with Drupal.
+                     The most important part is the image gallery, which is designed
+		     to be an improvement over the Drupal offering, in as much as the
+		     galleries form a DAG, rather than a tree, and so a photo can be
+		     a member of more than one gallery. E.g. classification can be by
+		     both site and species.
+cabal-version:       >= 1.2
+build-type:          Simple
+
+executable website
+    build-depends:   base, gd, filepath, exif, haskelldb, random, happstack-server, containers,
+                     mtl, formlets, xhtml, applicative-extras, old-time, url, haskell98,
+                     bytestring, utf8-string, hscolour==1.14, happstack-helpers, Crypto,
+                     happstack-util, haskelldb-hdbc-postgresql
+    main-is:         Main.hs
+
+executable DatabaseDefinitions
+    build-depends:   base, haskelldb, haskelldb-hdbc-postgresql
+    main-is:         DatabaseDefinitions.hs
+
+executable Init
+    build-depends:   base, haskelldb, haskelldb-hdbc-postgresql
+    main-is:         Init.hs
