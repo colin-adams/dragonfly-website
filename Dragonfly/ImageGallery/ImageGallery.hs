@@ -36,6 +36,7 @@ import Dragonfly.ApplicationState
 import qualified Dragonfly.Authorization.Authorities as Auth
 import Dragonfly.URISpace (imageGalleryURL)
 import qualified Dragonfly.Authorization.User as U
+import Dragonfly.ImageGallery.Exif
 
 -- | File-system directory where uploaded images are stored
 imageDirectory :: String
@@ -64,8 +65,34 @@ exifData fname = fromFile (imageDirectory ++ fname) >>= allTags
 -- | Display selected EXIF data as XHtml
 exifDiv :: [(String, String)] -> X.Html
 exifDiv tags = 
-    let fN = lookup fNumber tags
-        pairs = [(fNumberI, fN)]
+    let mnu = lookup manufacturer tags
+        mdl = lookup model tags
+        fL = lookup focalLength tags
+        dtO = lookup dtOriginal tags
+        fN = lookup fNumber tags
+        exp = lookup exposure tags
+        speed = lookup iso tags
+        flsh  = lookup flash tags
+        mtr = lookup meter tags
+        expM = lookup exposureMode tags
+        col = lookup colourSpace tags
+        wB = lookup whiteBalance tags
+        usr = lookup userComment tags
+        latR = lookup gpsLatRef tags
+        lat = lookup gpsLat tags
+        longR = lookup gpsLongRef tags
+        long = lookup gpsLong tags
+        altR = lookup gpsAltRef tags
+        alt = lookup gpsAlt tags
+        pairs = [(makeI, mnu), (modelI, mdl), (focalLengthI, fL), 
+                 (dtOriginalI, dtO), (fNumberI, fN), (exposureI, exp),
+                 (isoI, speed), (flashI, flsh), (meterI, mtr),
+                 (exposureModeI, expM), (colourSpaceI, col),
+                 (whiteBalanceI, wB), (userCommentI, usr),
+                 (gpsLatRefI, latR), (gpsLatI, lat),
+                 (gpsLongRefI, longR), (gpsLongI, long),
+                 (gpsAltRefI, altR), (gpsAltI, alt)
+                ]
     in X.thediv X.<< tagTable pairs
    
 -- | XHtml table of Exif information
@@ -79,14 +106,6 @@ tagDisplay (tag, value) =
     case value of
       Nothing -> X.noHtml
       Just v -> X.tr X.<< ((X.td X.<< tag) X.+++ (X.td X.<< v))
-
--- | EXIF tag
-fNumber :: String        
-fNumber = "FNumber"
-
--- | EXIF interpretation
-fNumberI :: String        
-fNumberI = "Aperture"
 
 -- | All galleries in database
 allGalleries :: Database -> IO [Gallery]

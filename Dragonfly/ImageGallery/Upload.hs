@@ -45,8 +45,6 @@ import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
 import Dragonfly.Forms hiding (withForm)
 
-import Debug.Trace
-
 -- | Handler for imageploadURL
 handleImageUpload :: MyServerPartT Response 
 handleImageUpload = dir (tail imageUploadURL) $ withSession uploadImagePage loginRequired
@@ -125,7 +123,7 @@ uploadImage udata = do
       thumbnailImage <- liftIO $ resizeImage 120 80 image
       liftIO $ saveJpegFile 70 (imageDirectory ++ thumbnailName) thumbnailImage
   exif <- liftIO $ exifData fname
-  trace (show exif) okHtml $ displayPreview (caption udata) previewName exif
+  okHtml $ displayPreview (caption udata) previewName exif
 
 -- | Save image information to database
 saveImageInfo :: Database -> String -> [String] -> String -> (String, String, String) -> IO ()
