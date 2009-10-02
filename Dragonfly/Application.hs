@@ -17,7 +17,8 @@ import Happstack.Helpers
 
 import Dragonfly.ApplicationState
 import Dragonfly.URISpace
-import Dragonfly.ImageGallery.ImageGallery
+import Dragonfly.ImageGallery.ImageGallery (divImageGallery)
+import Dragonfly.ImageGallery.Upload (divImageUpload)
 
 handleRoot :: MyServerPartT Response
 handleRoot = do
@@ -44,7 +45,8 @@ showRootPage :: Bool -> Html -> MyServerPartT Response
 showRootPage loggedIn msg = do
   let divCont = if loggedIn then signOutDiv else loginRegisterDiv
   return $ toResponse $ (header << (thetitle << titleText) +++ stylesheet) +++
-             (body << ((h1 << titleText) +++ msg +++ divCont +++ divImageGallery))
+             (body << ((h1 << titleText) +++ msg +++ divCont +++ 
+                                         divImageGallery +++ divImageUpload))
 
 rootPage :: Maybe Cookie -> Html -> MyServerPartT Response
 rootPage sc msg = do

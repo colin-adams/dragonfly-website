@@ -1,7 +1,7 @@
 -- | Form for uploading images
 module Dragonfly.ImageGallery.Upload (
                                       handleImageUpload,
-                                      imageDirectory
+                                      divImageUpload
                                      ) where
 
 import Control.Applicative
@@ -48,6 +48,10 @@ import Dragonfly.Forms hiding (withForm)
 -- | Handler for imageploadURL
 handleImageUpload :: MyServerPartT Response 
 handleImageUpload = dir (tail imageUploadURL) $ withSession uploadImagePage loginRequired
+
+-- | Html div to invoke uploading an image
+divImageUpload :: X.Html
+divImageUpload = X.thediv X.<< (X.anchor X.! [X.href imageUploadURL] X.<< "Upload an image")
 
 -- | XHtml page to upload an image to a gallery
 uploadImagePage :: User -> MyServerPartT Response
