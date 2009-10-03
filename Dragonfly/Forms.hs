@@ -39,12 +39,19 @@ withForm name frm handleErrors handleOk = dir (tail name) $ msum
 showErrorsInline :: X.Html -> [String] -> MyServerPartT Response
 showErrorsInline renderedForm errors = okHtml $ X.toHtml (show errors) +++ renderedForm
  
--- | Display a form to the user
+-- | Display a form to the user with a submit button
 createForm :: Env -> XForm a -> MyServerPartT X.Html
 createForm env frm = do
   let (extractor, xml, endState) = runFormState env frm
   xml' <- liftIO xml
   return $ X.form X.! [X.method "POST", X.enctype "multipart/form-data"] << (xml' +++ X.submit "submit" "Submit")
+ 
+-- | Display a form to the user with a preview button
+createPreview :: Env -> XForm a -> MyServerPartT X.Html
+createPreview env frm = do
+  let (extractor, xml, endState) = runFormState env frm
+  xml' <- liftIO xml
+  return $ X.form X.! [X.method "POST", X.enctype "multipart/form-data"] << (xml' +++ X.submit "preview" "Preview")
  
 -- | Render an html page as a good response
 okHtml :: (X.HTML a) => a -> MyServerPartT Response

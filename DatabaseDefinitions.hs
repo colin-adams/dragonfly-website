@@ -46,7 +46,7 @@ galleryTable = TInfo {tname = "galleryTable", cols = [galleryNameColumn, parentG
 
 -- | Relative URIs for various sized images
 imageTable :: TInfo
-imageTable = TInfo {tname = "imageTable", cols = [indexColumn, captionColumn, thumbnailColumn, previewColumn, originalColumn, uploadTimeColumn, imageTypeColumn]}
+imageTable = TInfo {tname = "imageTable", cols = [indexColumn, captionColumn, bodyColumn, thumbnailColumn, previewColumn, originalColumn, uploadTimeColumn, imageTypeColumn]}
 
 -- | Images in each gallery
 galleryImageTable :: TInfo
@@ -54,6 +54,9 @@ galleryImageTable = TInfo {tname = "galleryImageTable", cols = [galleryNameColum
 
 captionColumn :: CInfo
 captionColumn = CInfo {cname = "caption", descr = (StringT, False)}
+
+bodyColumn :: CInfo
+bodyColumn = CInfo {cname = "body", descr = (StringT, False)}
 
 galleryNameColumn :: CInfo
 galleryNameColumn = CInfo {cname = "galleryName", descr = (StringT, False)}

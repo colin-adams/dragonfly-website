@@ -43,7 +43,7 @@ import Dragonfly.Authorization.Auth
 import Dragonfly.Authorization.User
 import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
-import Dragonfly.Forms hiding (withForm)
+import Dragonfly.Forms
 
 -- | Handler for imageploadURL
 handleImageUpload :: MyServerPartT Response 
@@ -59,18 +59,19 @@ uploadImagePage user = do
   ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
-  withForm (uploadImageForm gs gNames) showErrorsInline uploadImage
+  withPreviewForm (uploadImageForm gs gNames) showErrorsInline uploadImage
 
 -- | Gathered form data
 data UploadData = UploadData { 
       caption :: String,
       galleryNames :: [String],
-      imageFile :: F.File
+      imageFile :: F.File,
+      description :: String
                              }
 -- | Process form for GET and PUT methods
-withForm :: XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
-withForm frm handleErrors handleOk = msum
-  [methodSP GET $ createForm [] frm >>= okHtml
+withPreviewForm :: XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
+withPreviewForm frm handleErrors handleOk = msum
+  [methodSP GET $ createPreview [] frm >>= okHtml
   , withDataFn ask $ methodSP POST . handleOk' . buildEnvironment
   ]
   where
@@ -95,11 +96,12 @@ toEnvElement (key, (Input cont fName ctype)) =
       Just f -> (key, Right $ F.File cont (f) (toFormContentType ctype))
       Nothing -> (key, Left $ LU.toString $ cont)
 
--- | Drop submit button
+-- | Drop submit and/or preview buttons
 noSubmit :: (String, Input) -> Bool
 noSubmit (s, _) =
     case s of
       "submit" -> False
+      "preview" -> False
       _ -> True
 
 -- | Convert from Happstack to Formlets ContentType
@@ -116,7 +118,7 @@ uploadImage udata = do
       fnames = (thumbnailName, previewName, fname)
   liftIO $ LB.writeFile ("files/" ++ (F.fileName $ imageFile udata)) (F.content $ imageFile udata)
   ApplicationState db _ <- ask
-  liftIO $ DB.transaction db (saveImageInfo db (caption udata) (galleryNames udata) imageType fnames)
+  liftIO $ DB.transaction db (saveImageInfo db (caption udata) (description udata) (galleryNames udata) imageType fnames)
   liftIO $ LB.writeFile (imageDirectory ++ fname) (F.content $ imageFile udata)
   case imageType of
     "jpeg" -> do
@@ -130,8 +132,8 @@ uploadImage udata = do
   okHtml $ displayPreview (caption udata) previewName exif
 
 -- | Save image information to database
-saveImageInfo :: Database -> String -> [String] -> String -> (String, String, String) -> IO ()
-saveImageInfo db caption galleries imageType (thumbnailName, previewName, originalName) = do
+saveImageInfo :: Database -> String -> String -> [String] -> String -> (String, String, String) -> IO ()
+saveImageInfo db caption description galleries imageType (thumbnailName, previewName, originalName) = do
   let q = do
         t <- DB.table IT.imageTable
         DB.order [DB.desc t IT.indexNumber]
@@ -142,15 +144,17 @@ saveImageInfo db caption galleries imageType (thumbnailName, previewName, origin
                     False -> 1 + (head rs DB.! IT.indexNumber)
   ct <- getClockTime 
   let utc = toUTCTime ct
-  DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # IT.thumbnail <<- thumbnailName # 
-                                IT.preview <<- previewName # 
-                                IT.original <<- originalName # IT.uploadTime <<- utc # IT.imageType <<- imageType)
+  DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # 
+                                IT.body <<- description # IT.thumbnail <<- thumbnailName # 
+                                IT.preview <<- previewName # IT.original <<- originalName # 
+                                IT.uploadTime <<- utc # IT.imageType <<- imageType)
   mapM_ (\name -> DB.insert db GIT.galleryImageTable (GIT.galleryName <<- name # GIT.indexNumber <<- nextIndex)) galleries
 
 -- | Process data from form
 uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
-uploadImageForm gs gNames = UploadData <$>  titleForm <*> (gallerySelectFormlet (galleryTree gs gNames) (Just [chooseSelection]))
-                            <*> imageInputForm
+uploadImageForm gs gNames = UploadData <$>  titleForm <*> 
+                            (gallerySelectFormlet (galleryTree gs gNames) (Just [chooseSelection]))
+                            <*> imageInputForm <*> descriptionForm
 
 -- | Gallery selection widget builder
 gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO [String]
@@ -172,6 +176,10 @@ titleForm = form `F.check` F.ensure valid error
     where form = "Title" `label` F.input Nothing
           valid = not . null
           error = "Image title must be supplied"
+
+-- | Description of picture (will be treated as written in Pandoc markdown)
+descriptionForm :: XForm String
+descriptionForm = "Description" `label` F.textarea (Just 8) (Just 80) (Just "")
 
 -- | Prompt for image file
 imageInputForm :: XForm F.File
