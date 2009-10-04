@@ -39,19 +39,25 @@ withForm name frm handleErrors handleOk = dir (tail name) $ msum
 showErrorsInline :: X.Html -> [String] -> MyServerPartT Response
 showErrorsInline renderedForm errors = okHtml $ X.toHtml (show errors) +++ renderedForm
  
--- | Display a form to the user with a submit button
-createForm :: Env -> XForm a -> MyServerPartT X.Html
-createForm env frm = do
+-- | Display a form to the user with additional buttons
+createBasicForm :: X.HTML b => Env -> XForm a -> b -> MyServerPartT X.Html
+createBasicForm env frm xhtml = do
   let (extractor, xml, endState) = runFormState env frm
   xml' <- liftIO xml
-  return $ X.form X.! [X.method "POST", X.enctype "multipart/form-data"] << (xml' +++ X.submit "submit" "Submit")
+  return $ X.form X.! [X.method "POST", X.enctype "multipart/form-data"] << (xml' +++ xhtml)
+
+-- | Display a form to the user with a submit button
+createForm :: Env -> XForm a -> MyServerPartT X.Html
+createForm env frm = createBasicForm env frm (X.submit "submit" "Submit")
  
 -- | Display a form to the user with a preview button
 createPreview :: Env -> XForm a -> MyServerPartT X.Html
-createPreview env frm = do
-  let (extractor, xml, endState) = runFormState env frm
-  xml' <- liftIO xml
-  return $ X.form X.! [X.method "POST", X.enctype "multipart/form-data"] << (xml' +++ X.submit "preview" "Preview")
+createPreview env frm = createBasicForm env frm (X.submit "preview" "Preview")
+
+-- | Display a form to the user with both a preview and a submit button
+createPreviewSubmit :: Env -> XForm a -> MyServerPartT X.Html
+createPreviewSubmit env frm = createBasicForm env frm
+                              (X.submit "preview" "Preview" +++ X.submit "submit" "Submit")
  
 -- | Render an html page as a good response
 okHtml :: (X.HTML a) => a -> MyServerPartT Response

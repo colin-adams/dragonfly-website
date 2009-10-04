@@ -59,7 +59,7 @@ uploadImagePage user = do
   ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
-  withPreviewForm (uploadImageForm gs gNames) showErrorsInline uploadImage
+  withPreviewForm (uploadImageForm gs gNames) (True, False) showErrorsInline previewImageUpload
 
 -- | Gathered form data
 data UploadData = UploadData { 
@@ -68,14 +68,18 @@ data UploadData = UploadData {
       imageFile :: F.File,
       description :: String
                              }
--- | Process form for GET and PUT methods
-withPreviewForm :: XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
-withPreviewForm frm handleErrors handleOk = msum
-  [methodSP GET $ createPreview [] frm >>= okHtml
+-- | Process form for GET and PUT methods with preview button, and/or submit button
+withPreviewForm :: XForm a -> (Bool, Bool) -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
+withPreviewForm frm (withPreview, withSubmit) handleErrors handleOk = msum
+  [methodSP GET $ c [] frm >>= okHtml
   , withDataFn ask $ methodSP POST . handleOk' . buildEnvironment
   ]
   where
-    handleOk' d = do
+    c = case (withPreview, withSubmit) of
+          (True, False) -> createPreview
+          (True, True)  -> createPreviewSubmit
+          (False, True) -> createForm
+    handleOk' (d, sub) = do
       let (extractor, html, _) = runFormState d frm
       v <- liftIO extractor  
       case v of
@@ -85,10 +89,12 @@ withPreviewForm frm handleErrors handleOk = msum
         Success s      -> handleOk s
 
 -- | Build an environment of form answers from the inputs.
-buildEnvironment :: ([(String, Input)], [(String, Cookie)]) -> F.Env
+-- | Also supply an indication if Submit button was pressed.
+buildEnvironment :: ([(String, Input)], [(String, Cookie)]) -> (F.Env, Bool)
 buildEnvironment (input, _) = 
     let input' = filter noSubmit input
-    in map toEnvElement input'
+        wasSubmit = elem "submit" $ map fst input
+    in (map toEnvElement input', wasSubmit)
 
 toEnvElement :: (String, Input) -> (String, Either String F.File)
 toEnvElement (key, (Input cont fName ctype)) =
@@ -108,28 +114,29 @@ noSubmit (s, _) =
 toFormContentType :: ContentType -> F.ContentType
 toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct)
 
--- | Process submitted form
-uploadImage :: UploadData -> MyServerPartT Response
-uploadImage udata = do
+-- | Process submitted form by showing preview page
+previewImageUpload :: UploadData -> MyServerPartT Response
+previewImageUpload udata = do
   let imageType = F.ctSubtype (F.contentType (imageFile udata))
-  fname <- liftIO $ toOriginal $ F.fileName $ imageFile udata
+  fname <- liftIO $ toOriginal True $ F.fileName $ imageFile udata
   let thumbnailName = toThumbnail fname
       previewName = toPreview fname
       fnames = (thumbnailName, previewName, fname)
-  liftIO $ LB.writeFile ("files/" ++ (F.fileName $ imageFile udata)) (F.content $ imageFile udata)
-  ApplicationState db _ <- ask
-  liftIO $ DB.transaction db (saveImageInfo db (caption udata) (description udata) (galleryNames udata) imageType fnames)
-  liftIO $ LB.writeFile (imageDirectory ++ fname) (F.content $ imageFile udata)
+  liftIO $ LB.writeFile (tempDirectory ++ fname) (F.content $ imageFile udata)
   case imageType of
     "jpeg" -> do
-      image <- liftIO $ loadJpegFile (imageDirectory ++ fname)
+      image <- liftIO $ loadJpegFile (tempDirectory ++ fname)
       -- TODO - constants for sizes and quality 
       previewImage <- liftIO $ resizeImage 640 400 image
-      liftIO $ saveJpegFile 85 (imageDirectory ++ previewName) previewImage
+      liftIO $ saveJpegFile 85 (tempDirectory ++ previewName) previewImage
       thumbnailImage <- liftIO $ resizeImage 120 80 image
-      liftIO $ saveJpegFile 70 (imageDirectory ++ thumbnailName) thumbnailImage
-  exif <- liftIO $ exifData fname
-  okHtml $ displayPreview (caption udata) previewName exif
+      liftIO $ saveJpegFile 70 (tempDirectory ++ thumbnailName) thumbnailImage
+  ApplicationState db _ <- ask
+  liftIO $ DB.transaction db (saveImageInfo db (caption udata) (description udata) 
+                                                (galleryNames udata) imageType fnames)
+  exif <- liftIO $ exifData True fname
+  -- TODO: change to displayPreviewForm
+  okHtml $ displayPreview (caption udata) ("temp/" ++ previewName) exif
 
 -- | Save image information to database
 saveImageInfo :: Database -> String -> String -> [String] -> String -> (String, String, String) -> IO ()
@@ -257,11 +264,14 @@ toPreview original =
     in base ++ "_preview" ++ ext
 
 -- | Convert original file name so it doesn't clash with an existing one
-toOriginal :: String -> IO String
-toOriginal fname = do
-  exists <- doesFileExist (imageDirectory ++ fname)
+toOriginal :: Bool -> String -> IO String
+toOriginal isTemp fname = do
+  let dir = case isTemp of
+              True -> tempDirectory
+              False -> imageDirectory
+  exists <- doesFileExist (dir ++ fname)
   if exists then
       do
         let (base, ext) = splitExtension fname
-        toOriginal (base ++ "0" ++ ext)
+        toOriginal isTemp (base ++ "0" ++ ext)
       else return fname

@@ -6,6 +6,7 @@ module Dragonfly.ImageGallery.ImageGallery (
                                             handleImageGallery,
                                             handleImages,
                                             imageDirectory,
+                                            tempDirectory,
                                             displayPreview,
                                             exifData
                                            ) where
@@ -40,7 +41,11 @@ import Dragonfly.ImageGallery.Exif
 
 -- | File-system directory where uploaded images are stored
 imageDirectory :: String
-imageDirectory = "/home/colin/dragonfly-website/files/"
+imageDirectory = "/home/colin/dragonfly-website/files/images/"
+
+-- | File-system directory where temporary images are stored
+tempDirectory :: String
+tempDirectory = "/home/colin/dragonfly-website/files/images/temp/"
 
 data Gallery = Gallery {
       name :: String,
@@ -59,8 +64,12 @@ displayPreview caption previewName exif =
 
 -- | All interpretable EXIF data for fname                            
 -- currently excludes MakerNote
-exifData :: String -> IO [(String, String)]
-exifData fname = fromFile (imageDirectory ++ fname) >>= allTags
+exifData :: Bool -> String -> IO [(String, String)]
+exifData isTemp fname = 
+    let dir = case isTemp of
+                True -> tempDirectory
+                False -> imageDirectory
+    in fromFile (dir ++ fname) >>= allTags
 
 -- | Display selected EXIF data as XHtml
 exifDiv :: [(String, String)] -> X.Html
@@ -130,8 +139,7 @@ handleImages = do
                  rq <- askRq
                  let paths = rqPaths rq
                  if null paths then mzero else
-                     do
-                       fileServeStrict [] imageDirectory
+                     fileServeStrict [] imageDirectory
 
 -- | Handler for imageGalleryURL
 handleImageGallery :: MyServerPartT Response 
