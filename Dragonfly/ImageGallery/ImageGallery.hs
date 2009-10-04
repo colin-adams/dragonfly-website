@@ -32,6 +32,9 @@ import Happstack.Server.HTTP.FileServe
 import System.Time
 
 import qualified Text.XHtml.Strict as X
+import Text.Pandoc.Shared
+import Text.Pandoc.Readers.Markdown
+import Text.Pandoc.Writers.HTMLStrict
 
 import Dragonfly.ApplicationState
 import qualified Dragonfly.Authorization.Authorities as Auth
@@ -56,11 +59,13 @@ data Gallery = Gallery {
     } deriving Show
 
 -- | Display preview picture and EXIF information
-displayPreview :: String -> String -> [(String, String)] -> X.Html
-displayPreview caption previewName exif =
-    (X.h1 X.<< caption) 
-    X.+++ X.thediv X.<< X.image X.! [X.src previewName]
-    X.+++ (exifDiv exif)
+displayPreview :: String -> String -> String -> [(String, String)] -> X.Html
+displayPreview caption description previewName exif =
+    let doc = readMarkdown defaultParserState description
+        desc = writeXHtml defaultWriterOptions doc
+    in (X.h1 X.<< X.stringToHtml caption) 
+       X.+++ X.thediv X.<< desc X.+++ X.image X.! [X.src previewName]
+       X.+++ (exifDiv exif)
 
 -- | All interpretable EXIF data for fname                            
 -- currently excludes MakerNote
@@ -114,7 +119,7 @@ tagDisplay :: (String, Maybe String) -> X.Html
 tagDisplay (tag, value) =
     case value of
       Nothing -> X.noHtml
-      Just v -> X.tr X.<< ((X.td X.<< tag) X.+++ (X.td X.<< v))
+      Just v -> X.tr X.<< ((X.td X.<< X.stringToHtml tag) X.+++ (X.td X.<< X.stringToHtml v))
 
 -- | All galleries in database
 allGalleries :: Database -> IO [Gallery]

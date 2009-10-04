@@ -136,7 +136,7 @@ previewImageUpload udata = do
                                                 (galleryNames udata) imageType fnames)
   exif <- liftIO $ exifData True fname
   -- TODO: change to displayPreviewForm
-  okHtml $ displayPreview (caption udata) ("temp/" ++ previewName) exif
+  okHtml $ displayPreview (caption udata) (description udata) ("temp/" ++ previewName) exif
 
 -- | Save image information to database
 saveImageInfo :: Database -> String -> String -> [String] -> String -> (String, String, String) -> IO ()
