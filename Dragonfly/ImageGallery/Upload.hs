@@ -186,8 +186,9 @@ titleForm = form `F.check` F.ensure valid error
 
 -- | Description of picture (will be treated as written in Pandoc markdown)
 descriptionForm :: XForm String
-descriptionForm = "Description" `label` F.textarea (Just 8) (Just 80) (Just "")
-
+descriptionForm = F.check form stripCRs 
+    where form = "Description" `label` F.textarea (Just 8) (Just 80) (Just "")
+          stripCRs result = Success (filter ( not . (`elem` "\r")) result)
 -- | Prompt for image file
 imageInputForm :: XForm F.File
 imageInputForm = form `F.check` F.ensure validImageFile error
