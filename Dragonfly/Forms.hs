@@ -21,7 +21,7 @@ type XForm a = F.XHtmlForm IO a
 -- | Process form if URL path matches name
 withForm :: String -> XForm a -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
 withForm name frm handleErrors handleOk = dir (tail name) $ msum
-  [methodSP GET $ createForm [] frm >>= okHtml
+  [methodSP GET $ createForm X.noHtml [] frm >>= okHtml
   , withDataFn lookPairs $ methodSP POST . handleOk' . simple
   ]
   where
@@ -30,7 +30,7 @@ withForm name frm handleErrors handleOk = dir (tail name) $ msum
       v <- liftIO extractor  
       case v of
         Failure faults -> do 
-          f <- createForm d frm
+          f <- createForm X.noHtml d frm
           handleErrors f faults
         Success s      -> handleOk s
     simple = List.map (second Left)
@@ -39,24 +39,25 @@ withForm name frm handleErrors handleOk = dir (tail name) $ msum
 showErrorsInline :: X.Html -> [String] -> MyServerPartT Response
 showErrorsInline renderedForm errors = okHtml $ X.toHtml (show errors) +++ renderedForm
  
--- | Display a form to the user with additional buttons
-createBasicForm :: X.HTML b => Env -> XForm a -> b -> MyServerPartT X.Html
-createBasicForm env frm xhtml = do
+-- | Display a form to the user with optional prologue and additional buttons
+createBasicForm :: (X.HTML b, X.HTML c) => c -> Env -> XForm a -> b -> MyServerPartT X.Html
+createBasicForm prologue env frm xhtml = do
   let (extractor, xml, endState) = runFormState env frm
   xml' <- liftIO xml
-  return $ X.form X.! [X.method "POST", X.enctype "multipart/form-data"] << (xml' +++ xhtml)
+  let form = X.form X.! [X.method "POST", X.enctype "multipart/form-data"] << (xml' +++ xhtml)
+  return $ prologue +++ form
 
 -- | Display a form to the user with a submit button
-createForm :: Env -> XForm a -> MyServerPartT X.Html
-createForm env frm = createBasicForm env frm (X.submit "submit" "Submit")
+createForm :: X.HTML b => b -> Env -> XForm a -> MyServerPartT X.Html
+createForm prologue env frm = createBasicForm prologue env frm (X.submit "submit" "Submit")
  
 -- | Display a form to the user with a preview button
-createPreview :: Env -> XForm a -> MyServerPartT X.Html
-createPreview env frm = createBasicForm env frm (X.submit "preview" "Preview")
+createPreview :: X.HTML b => b -> Env -> XForm a -> MyServerPartT X.Html
+createPreview prologue env frm = createBasicForm prologue env frm (X.submit "preview" "Preview")
 
 -- | Display a form to the user with both a preview and a submit button
-createPreviewSubmit :: Env -> XForm a -> MyServerPartT X.Html
-createPreviewSubmit env frm = createBasicForm env frm
+createPreviewSubmit :: X.HTML b => b -> Env -> XForm a -> MyServerPartT X.Html
+createPreviewSubmit prologue env frm = createBasicForm prologue env frm
                               (X.submit "preview" "Preview" +++ X.submit "submit" "Submit")
  
 -- | Render an html page as a good response

@@ -59,7 +59,8 @@ uploadImagePage user = do
   ApplicationState db _ <- ask
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
-  withPreviewForm (uploadImageForm gs gNames) (True, False) showErrorsInline previewImageUpload
+  withPreviewForm X.noHtml [] (uploadImageForm gs gNames) (True, False)
+                  showErrorsInline previewImageUpload
 
 -- | Gathered form data
 data UploadData = UploadData { 
@@ -69,25 +70,30 @@ data UploadData = UploadData {
       description :: String
                              }
 -- | Process form for GET and PUT methods with preview button, and/or submit button
-withPreviewForm :: XForm a -> (Bool, Bool) -> (X.Html -> [String] -> MyServerPartT Response) ->
-                  (a -> MyServerPartT Response) -> MyServerPartT Response 
-withPreviewForm frm (withPreview, withSubmit) handleErrors handleOk = msum
-  [methodSP GET $ c [] frm >>= okHtml
-  , withDataFn ask $ methodSP POST . handleOk' . buildEnvironment
-  ]
+withPreviewForm :: X.HTML b => b -- ^ Optional HTML fragment to prepend to form
+                -> F.Env         -- ^ Environment of form values
+                -> XForm a       -- ^ Form to display
+                -> (Bool, Bool)  -- ^ Do we add (preview, submit) buttons?
+                -> (X.Html -> [String] -> MyServerPartT Response) -- ^ Error handler
+                -> (a -> F.Env -> Bool -> XForm a -> MyServerPartT Response) -- ^ Success handler
+                -> MyServerPartT Response 
+withPreviewForm prologue env frm (withPreview, withSubmit) handleErrors handleOk =
+  msum [methodSP GET $ formMaker env frm >>= okHtml
+       , withDataFn ask $ methodSP POST . handleOk' . buildEnvironment
+       ]
   where
-    c = case (withPreview, withSubmit) of
-          (True, False) -> createPreview
-          (True, True)  -> createPreviewSubmit
-          (False, True) -> createForm
+    formMaker = case (withPreview, withSubmit) of
+                  (True, False) -> createPreview prologue
+                  (True, True) -> createPreviewSubmit prologue
+                  (False, True) -> createForm prologue
     handleOk' (d, sub) = do
       let (extractor, html, _) = runFormState d frm
       v <- liftIO extractor  
       case v of
         Failure faults -> do 
-          f <- createForm d frm
-          handleErrors f faults
-        Success s      -> handleOk s
+               f <- formMaker d frm
+               handleErrors f faults
+        Success s -> handleOk s d sub frm
 
 -- | Build an environment of form answers from the inputs.
 -- | Also supply an indication if Submit button was pressed.
@@ -116,8 +122,8 @@ toFormContentType :: ContentType -> F.ContentType
 toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct)
 
 -- | Process submitted form by showing preview page
-previewImageUpload :: UploadData -> MyServerPartT Response
-previewImageUpload udata = do
+previewImageUpload :: UploadData -> F.Env -> Bool -> XForm UploadData -> MyServerPartT Response
+previewImageUpload udata env sub frm = do
   let imageType = F.ctSubtype (F.contentType (imageFile udata))
   fname <- liftIO $ toOriginal True $ F.fileName $ imageFile udata
   let thumbnailName = toThumbnail fname
@@ -127,7 +133,7 @@ previewImageUpload udata = do
   case imageType of
     "jpeg" -> do
       image <- liftIO $ loadJpegFile (tempDirectory ++ fname)
-      -- TODO - constants for sizes and quality 
+      -- TODO - constants for sizes and quality - also need to maintain aspect ratio
       previewImage <- liftIO $ resizeImage 640 400 image
       liftIO $ saveJpegFile 85 (tempDirectory ++ previewName) previewImage
       thumbnailImage <- liftIO $ resizeImage 120 80 image
@@ -136,8 +142,12 @@ previewImageUpload udata = do
   liftIO $ DB.transaction db (saveImageInfo db (caption udata) (description udata) 
                                                 (galleryNames udata) imageType fnames)
   exif <- liftIO $ exifData True fname
-  -- TODO: change to displayPreviewForm
-  okHtml $ displayPreview (caption udata) (description udata) ("temp/" ++ previewName) exif
+  if sub then
+      okHtml $ displayPreview (caption udata) (description udata) ("temp/" ++ previewName) exif
+      else do
+         xhtml <- createPreviewSubmit (displayPreview (caption udata) (description udata) 
+                                       ("temp/" ++ previewName) exif) env frm
+         okHtml xhtml
 
 -- | Save image information to database
 saveImageInfo :: Database -> String -> String -> [String] -> String -> (String, String, String) -> IO ()
