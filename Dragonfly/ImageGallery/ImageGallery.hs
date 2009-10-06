@@ -34,7 +34,7 @@ import System.Time
 import qualified Text.XHtml.Strict as X
 import Text.Pandoc.Shared
 import Text.Pandoc.Readers.Markdown
-import Text.Pandoc.Writers.HTMLStrict
+import Text.Pandoc.Writers.HTML
 
 import Dragonfly.ApplicationState
 import qualified Dragonfly.Authorization.Authorities as Auth
@@ -62,7 +62,7 @@ data Gallery = Gallery {
 displayPreview :: String -> String -> String -> [(String, String)] -> X.Html
 displayPreview caption description previewName exif =
     let doc = readMarkdown defaultParserState description
-        desc = writeXHtml defaultWriterOptions doc
+        desc = writeHtml defaultWriterOptions doc
     in (X.h1 X.<< X.stringToHtml caption) 
        X.+++ X.thediv X.<< desc X.+++ X.image X.! [X.src previewName]
        X.+++ (exifDiv exif)

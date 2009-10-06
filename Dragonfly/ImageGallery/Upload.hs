@@ -69,7 +69,8 @@ data UploadData = UploadData {
       description :: String
                              }
 -- | Process form for GET and PUT methods with preview button, and/or submit button
-withPreviewForm :: XForm a -> (Bool, Bool) -> (X.Html -> [String] -> MyServerPartT Response) -> (a -> MyServerPartT Response) -> MyServerPartT Response 
+withPreviewForm :: XForm a -> (Bool, Bool) -> (X.Html -> [String] -> MyServerPartT Response) ->
+                  (a -> MyServerPartT Response) -> MyServerPartT Response 
 withPreviewForm frm (withPreview, withSubmit) handleErrors handleOk = msum
   [methodSP GET $ c [] frm >>= okHtml
   , withDataFn ask $ methodSP POST . handleOk' . buildEnvironment
