@@ -28,6 +28,7 @@ import Happstack.Server
 import Network.URL
 
 import System.FilePath.Posix (splitExtension)
+import System.Posix.Files (rename)
 import System.Time
 
 import Text.Formlets (runFormState)
@@ -44,6 +45,8 @@ import Dragonfly.Authorization.User
 import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
 import Dragonfly.Forms
+
+import Debug.Trace
 
 -- | Handler for imageploadURL
 handleImageUpload :: MyServerPartT Response 
@@ -67,8 +70,11 @@ data UploadData = UploadData {
       caption :: String,
       galleryNames :: [String],
       imageFile :: F.File,
-      description :: String
-                             }
+      description :: String,
+      previousFileName :: String,
+      previousCT :: String
+                             } deriving Show
+
 -- | Process form for GET and PUT methods with preview button, and/or submit button
 withPreviewForm :: X.HTML b => b -- ^ Optional HTML fragment to prepend to form
                 -> F.Env         -- ^ Environment of form values
@@ -124,30 +130,111 @@ toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct
 -- | Process submitted form by showing preview page
 previewImageUpload :: UploadData -> F.Env -> Bool -> XForm UploadData -> MyServerPartT Response
 previewImageUpload udata env sub frm = do
-  let imageType = F.ctSubtype (F.contentType (imageFile udata))
-  fname <- liftIO $ toOriginal True $ F.fileName $ imageFile udata
-  let thumbnailName = toThumbnail fname
-      previewName = toPreview fname
-      fnames = (thumbnailName, previewName, fname)
-  liftIO $ LB.writeFile (tempDirectory ++ fname) (F.content $ imageFile udata)
+  let f = imageFile udata
+      dir = case sub of
+              True -> imageDirectory
+              False -> tempDirectory
+  let contents = F.content f
+      (usePrevious, fName, imageType) = case LB.length contents == 0 of
+             True -> (True, previousFileName udata, previousCT udata)
+             False -> (False, F.fileName $ imageFile udata, F.ctSubtype $ F.contentType $ imageFile udata)
+  fnames@(thumbnailName, previewName, fname) <- liftIO $ imageNames fName (not sub)
+  if usePrevious
+    then
+       if length fName == 0 
+        then displayNoFileError env frm
+        else do
+          if validImageFile f
+           then do
+             if sub 
+               then do
+                 liftIO $ makeTempImagePermanent fnames
+                 saveToDatabase fnames imageType
+                 exif <- liftIO $ exifData False fname
+                 okHtml $ displayPreview (caption udata) (description udata) previewName exif
+               else do
+                 saveToDatabase fnames imageType
+                 displayPreviewPage udata dir fnames imageType env frm
+            else displayInvalidImage f env frm
+    else
+       if validImageFile f
+         then do
+           liftIO $ LB.writeFile (dir ++ fname) contents
+           if sub 
+             then do
+               liftIO $ save_files dir fnames imageType
+               saveToDatabase fnames imageType
+               exif <- liftIO $ exifData False fname
+               okHtml $ displayPreview (caption udata) (description udata) previewName exif
+             else do
+               displayPreviewPage udata dir fnames imageType env frm
+         else displayInvalidImage f env frm
+ where saveToDatabase fnames imageType = do
+         ApplicationState db _ <- ask
+         liftIO $ DB.transaction db (saveImageInfo db (caption udata) (description udata) 
+                            (galleryNames udata) imageType fnames)
+
+-- | Display preview image and options to confirm or change
+displayPreviewPage :: UploadData -> String -> (String, String, String) -> String ->
+                     F.Env -> XForm UploadData -> MyServerPartT Response
+displayPreviewPage udata dir fnames@(thumbnailName, previewName, fname) imageType env frm = do
+  liftIO $ save_files dir fnames imageType
+  exif <- liftIO $ exifData True fname
+  xhtml <- createPreviewSubmit (displayPreview (caption udata) (description udata) 
+                               ("temp/" ++ previewName) exif) (enhancedEnvironment fname imageType env) frm
+  okHtml xhtml
+
+-- | Save image files to disk
+save_files :: String -> (String, String, String) -> String -> IO ()
+save_files dir fnames@(thumbnailName, previewName, fname) imageType = do
   case imageType of
-    "jpeg" -> do
-      image <- liftIO $ loadJpegFile (tempDirectory ++ fname)
+    "jpeg" -> do -- TODO png and gif
+      image <- liftIO $ loadJpegFile (dir ++ fname)
       -- TODO - constants for sizes and quality - also need to maintain aspect ratio
       previewImage <- liftIO $ resizeImage 640 400 image
-      liftIO $ saveJpegFile 85 (tempDirectory ++ previewName) previewImage
+      liftIO $ saveJpegFile 85 (dir ++ previewName) previewImage
       thumbnailImage <- liftIO $ resizeImage 120 80 image
-      liftIO $ saveJpegFile 70 (tempDirectory ++ thumbnailName) thumbnailImage
-  ApplicationState db _ <- ask
-  liftIO $ DB.transaction db (saveImageInfo db (caption udata) (description udata) 
-                                                (galleryNames udata) imageType fnames)
-  exif <- liftIO $ exifData True fname
-  if sub then
-      okHtml $ displayPreview (caption udata) (description udata) ("temp/" ++ previewName) exif
-      else do
-         xhtml <- createPreviewSubmit (displayPreview (caption udata) (description udata) 
-                                       ("temp/" ++ previewName) exif) env frm
-         okHtml xhtml
+      liftIO $ saveJpegFile 70 (dir ++ thumbnailName) thumbnailImage
+
+enhancedEnvironment :: String -> String -> F.Env -> F.Env
+enhancedEnvironment fname imageType env =
+    let prologue = take 4 env 
+        fnameKey = fst (env !! 4)
+        ctKey = fst (env !! 5)
+        fnamePair = (fnameKey, Left fname)
+        ctPair = (ctKey, Left imageType)
+    in prologue ++ (fnamePair:[ctPair])
+
+-- | Re-display the form with a request to select a file
+displayNoFileError :: F.Env -- ^ Environment of previous form values
+                   -> XForm UploadData   -- ^ Form to display
+                   -> MyServerPartT Response 
+displayNoFileError env frm = do
+    xhtml <- createPreview (X.p X.<< "You must select a file") env frm
+    okHtml xhtml
+
+-- | Move temporary files to permanent directory
+makeTempImagePermanent :: (String, String, String) -> IO ()
+makeTempImagePermanent fnames@(thumbnailName, previewName, fname) = do
+  rename (tempDirectory ++ thumbnailName) (imageDirectory ++ thumbnailName)
+  rename (tempDirectory ++ previewName) (imageDirectory ++ previewName)
+  rename (tempDirectory ++ fname) (imageDirectory ++ fname)
+
+displayInvalidImage :: F.File -- ^ File that was uploaded
+                    -> F.Env -- ^ Environment of previous form values
+                    -> XForm UploadData   -- ^ Form to display
+                    -> MyServerPartT Response 
+displayInvalidImage file env frm = do 
+    xhtml <- createPreview (X.p X.<< (F.fileName file ++ " is not a supported image type")) env frm
+    okHtml xhtml
+
+-- | Names of thumbnail, preview and original images respectively
+imageNames :: String -> Bool -> IO (String, String, String)
+imageNames file isTemp = do
+  original <- toOriginal isTemp file
+  let thumbnailName = toThumbnail original
+      previewName = toPreview original
+  return (thumbnailName, previewName, original)
 
 -- | Save image information to database
 saveImageInfo :: Database -> String -> String -> [String] -> String -> (String, String, String) -> IO ()
@@ -172,7 +259,7 @@ saveImageInfo db caption description galleries imageType (thumbnailName, preview
 uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
 uploadImageForm gs gNames = UploadData <$>  titleForm <*> 
                             (gallerySelectFormlet (galleryTree gs gNames) (Just [chooseSelection]))
-                            <*> imageInputForm <*> descriptionForm
+                            <*> imageInputForm <*> descriptionForm <*> (F.hidden Nothing) <*> (F.hidden Nothing)
 
 -- | Gallery selection widget builder
 gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO [String]
@@ -200,15 +287,15 @@ descriptionForm :: XForm String
 descriptionForm = F.check form stripCRs 
     where form = "Description" `label` F.textarea (Just 8) (Just 80) (Just "")
           stripCRs result = Success (filter ( not . (`elem` "\r")) result)
+
 -- | Prompt for image file
 imageInputForm :: XForm F.File
-imageInputForm = form `F.check` F.ensure validImageFile error
+imageInputForm = form
     where form = F.plug (\xhtml -> X.p << (X.label << "Image file:") +++ xhtml) F.file
-          error = "A JPEG/GIF/PNG file must be selected"
 
 -- | Is the file an image type supported by Graphics.GD?
 validImageFile :: F.File -> Bool
-validImageFile (F.File cont fName ct) = 
+validImageFile (F.File cont fName ct) =
     case F.ctType ct of
       "image" -> case F.ctSubtype ct of
                   "jpeg" -> True
