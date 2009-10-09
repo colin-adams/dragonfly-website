@@ -48,7 +48,7 @@ imageDirectory = "/home/colin/dragonfly-website/files/images/"
 
 -- | File-system directory where temporary images are stored
 tempDirectory :: String
-tempDirectory = "/tmp"
+tempDirectory = "/tmp/"
 
 data Gallery = Gallery {
       name :: String,
