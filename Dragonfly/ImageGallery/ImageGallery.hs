@@ -29,6 +29,7 @@ import Graphics.Exif
 import Happstack.Server.SimpleHTTP
 import Happstack.Server.HTTP.FileServe
 
+import System.Environment
 import System.Time
 
 import qualified Text.XHtml.Strict as X
@@ -43,8 +44,14 @@ import qualified Dragonfly.Authorization.User as U
 import Dragonfly.ImageGallery.Exif
 
 -- | File-system directory where uploaded images are stored
-imageDirectory :: String
-imageDirectory = "/home/colin/dragonfly-website/files/images/"
+imageDirectory :: IO String
+imageDirectory = do
+  h <- homeDirectory
+  return $ h ++ "/dragonfly-website/files/images/"
+
+-- | Home directory of user running website
+homeDirectory :: IO String
+homeDirectory = getEnv "HOME"
 
 -- | File-system directory where temporary images are stored
 tempDirectory :: String
@@ -70,11 +77,13 @@ displayPreview caption description previewName exif =
 -- | All interpretable EXIF data for fname                            
 -- currently excludes MakerNote
 exifData :: Bool -> String -> IO [(String, String)]
-exifData isTemp fname = 
-    let dir = case isTemp of
+exifData isTemp fname = do
+  iDir <- imageDirectory
+  let dir = case isTemp of
                 True -> tempDirectory
-                False -> imageDirectory
-    in fromFile (dir ++ fname) >>= allTags
+                False -> iDir
+  exif <- fromFile (dir ++ fname)
+  allTags exif
 
 -- | Display selected EXIF data as XHtml
 exifDiv :: [(String, String)] -> X.Html
@@ -141,10 +150,12 @@ divImageGallery = X.thediv X.<< (X.anchor X.! [X.href imageGalleryURL] X.<< "Ima
 -- | Handler for images
 handleImages :: MyServerPartT Response 
 handleImages = do
-                 rq <- askRq
-                 let paths = rqPaths rq
-                 if null paths then mzero else
-                     fileServeStrict [] imageDirectory
+  iDir <- liftIO $ imageDirectory
+  rq <- askRq
+  let paths = rqPaths rq
+  if null paths
+    then mzero 
+    else fileServeStrict [] iDir
 
 -- | Handler for imageGalleryURL
 handleImageGallery :: MyServerPartT Response 

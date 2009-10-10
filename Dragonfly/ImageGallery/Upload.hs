@@ -128,9 +128,10 @@ toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct
 -- | Process submitted form by showing preview page
 previewImageUpload :: UploadData -> F.Env -> Bool -> XForm UploadData -> MyServerPartT Response
 previewImageUpload udata env sub frm = do
+  iDir <- liftIO $ imageDirectory
   let f = imageFile udata
       dir = case sub of
-              True -> imageDirectory
+              True -> iDir
               False -> tempDirectory
   let contents = F.content f
       (usePrevious, fName, imageType) = case LB.length contents == 0 of
@@ -217,11 +218,12 @@ displayNoFileError env frm = do
 -- | Move temporary files to permanent directory
 makeTempImagePermanent :: (String, String, String) -> IO ()
 makeTempImagePermanent fnames@(thumbnailName, previewName, fname) = do
-  copyFile (tempDirectory ++ thumbnailName) (imageDirectory ++ thumbnailName)
+  iDir <- imageDirectory
+  copyFile (tempDirectory ++ thumbnailName) (iDir ++ thumbnailName)
   removeFile (tempDirectory ++ thumbnailName)
-  copyFile (tempDirectory ++ previewName) (imageDirectory ++ previewName)
+  copyFile (tempDirectory ++ previewName) (iDir ++ previewName)
   removeFile (tempDirectory ++ previewName)
-  copyFile (tempDirectory ++ fname) (imageDirectory ++ fname)
+  copyFile (tempDirectory ++ fname) (iDir ++ fname)
   removeFile (tempDirectory ++ fname)
 
 displayInvalidImage :: F.File -- ^ File that was uploaded
@@ -374,9 +376,10 @@ toPreview original =
 -- | Convert original file name so it doesn't clash with an existing one
 toOriginal :: Bool -> String -> IO String
 toOriginal isTemp fname = do
+  iDir <- imageDirectory
   let dir = case isTemp of
               True -> tempDirectory
-              False -> imageDirectory
+              False -> iDir
   exists <- doesFileExist (dir ++ fname)
   if exists then
       do
