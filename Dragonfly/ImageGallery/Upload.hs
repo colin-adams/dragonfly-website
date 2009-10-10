@@ -196,9 +196,10 @@ save_files dir fnames@(thumbnailName, previewName, fname) imageType = do
 
 enhancedEnvironment :: String -> String -> F.Env -> F.Env
 enhancedEnvironment fname imageType env =
-    let prologue = take 4 env 
-        fnameKey = fst (env !! 5)
-        ctKey = fst (env !! 6)
+    let count = length env
+        prologue = take (count - 2) env 
+        fnameKey = fst (env !! (count - 2))
+        ctKey = fst (env !! (count - 1))
         fnamePair = (fnameKey, Left fname)
         ctPair = (ctKey, Left imageType)
     in if length imageType == 0
