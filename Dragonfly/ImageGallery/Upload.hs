@@ -28,7 +28,7 @@ import Happstack.Server
 import Network.URL
 
 import System.FilePath.Posix (splitExtension)
-import System.Posix.Files (rename)
+import System.Directory (copyFile, removeFile)
 import System.Time
 
 import Text.Formlets (runFormState)
@@ -45,8 +45,6 @@ import Dragonfly.Authorization.User
 import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
 import Dragonfly.Forms
-
-import Debug.Trace
 
 -- | Handler for imageploadURL
 handleImageUpload :: MyServerPartT Response 
@@ -144,7 +142,7 @@ previewImageUpload udata env sub frm = do
        if length fName == 0 
         then displayNoFileError env frm
         else do
-          if validImageFile f
+          if validImageType imageType
            then do
              if sub 
                then do
@@ -203,7 +201,9 @@ enhancedEnvironment fname imageType env =
         ctKey = fst (env !! 6)
         fnamePair = (fnameKey, Left fname)
         ctPair = (ctKey, Left imageType)
-    in prologue ++ (fnamePair:[ctPair])
+    in if length imageType == 0
+       then env
+       else prologue ++ (fnamePair:[ctPair])
 
 -- | Re-display the form with a request to select a file
 displayNoFileError :: F.Env -- ^ Environment of previous form values
@@ -216,9 +216,12 @@ displayNoFileError env frm = do
 -- | Move temporary files to permanent directory
 makeTempImagePermanent :: (String, String, String) -> IO ()
 makeTempImagePermanent fnames@(thumbnailName, previewName, fname) = do
-  rename (tempDirectory ++ thumbnailName) (imageDirectory ++ thumbnailName)
-  rename (tempDirectory ++ previewName) (imageDirectory ++ previewName)
-  rename (tempDirectory ++ fname) (imageDirectory ++ fname)
+  copyFile (tempDirectory ++ thumbnailName) (imageDirectory ++ thumbnailName)
+  removeFile (tempDirectory ++ thumbnailName)
+  copyFile (tempDirectory ++ previewName) (imageDirectory ++ previewName)
+  removeFile (tempDirectory ++ previewName)
+  copyFile (tempDirectory ++ fname) (imageDirectory ++ fname)
+  removeFile (tempDirectory ++ fname)
 
 displayInvalidImage :: F.File -- ^ File that was uploaded
                     -> F.Env -- ^ Environment of previous form values
@@ -293,15 +296,20 @@ imageInputForm :: XForm F.File
 imageInputForm = form
     where form = F.plug (\xhtml -> X.p << (X.label << "Image file:") +++ xhtml) F.file
 
+-- | Is the image type supported by Graphics.GD?
+validImageType :: String -> Bool
+validImageType it =
+    case it of
+      "jpeg" -> True
+      "png" -> True
+      "gif" -> True
+      _ -> False
+
 -- | Is the file an image type supported by Graphics.GD?
 validImageFile :: F.File -> Bool
 validImageFile (F.File cont fName ct) =
     case F.ctType ct of
-      "image" -> case F.ctSubtype ct of
-                  "jpeg" -> True
-                  "png" -> True
-                  "gif" -> True
-                  _ -> False
+      "image" -> validImageType $ F.ctSubtype ct
       _ -> False
 
 label :: String -> XForm String -> XForm String
