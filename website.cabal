@@ -22,7 +22,7 @@ executable website
     build-depends:   base, gd, filepath, exif, haskelldb, random, happstack-server, containers,
                      mtl, formlets, xhtml, applicative-extras, old-time, url, haskell98,
                      bytestring, utf8-string, hscolour==1.14, happstack-helpers, Crypto,
-                     happstack-util, haskelldb-hdbc-postgresql, pandoc
+                     happstack-util, haskelldb-hdbc-postgresql, pandoc, directory
     main-is:         Main.hs
 
 executable DatabaseDefinitions
