@@ -14,6 +14,7 @@ module Dragonfly.ImageGallery.ImageGallery (
 import Control.Monad.Reader
 import Control.Concurrent.MVar
 
+import qualified Data.ByteString.Lazy.UTF8 as LU
 import Data.List (nub)
 import qualified Data.Map as Map
 import Data.Tree
@@ -66,13 +67,14 @@ data Gallery = Gallery {
     } deriving Show
 
 -- | Display preview picture and EXIF information
-displayPreview :: String -> String -> String -> [(String, String)] -> X.Html
-displayPreview caption description previewName exif =
+displayPreview :: String -> String -> String -> String -> [(String, String)] -> X.Html
+displayPreview caption description previewName originalName exif =
     let doc = readMarkdown defaultParserState description
         desc = writeHtml defaultWriterOptions doc
     in (X.h1 X.<< X.stringToHtml caption) 
        X.+++ X.thediv X.<< desc X.+++ X.image X.! [X.src previewName]
        X.+++ (exifDiv exif)
+       X.+++ X.thediv X.<< X.anchor X.! [X.href originalName] X.<< "original"
 
 -- | All interpretable EXIF data for fname                            
 -- currently excludes MakerNote
@@ -162,14 +164,27 @@ handleImageGallery :: MyServerPartT Response
 handleImageGallery = dir (tail imageGalleryURL) $ do
   rq <- askRq
   let cookies = rqCookies rq
-  let sc = lookup sessionCookie cookies
+      sc = lookup sessionCookie cookies
+      params = rqInputs rq
+      galleryParam = lookup galleryParameter params
 
   ApplicationState db sessions <- lift ask
   sess <- liftIO $ readMVar sessions
-  galleries <- liftIO $ topLevelGalleries db
+  (header, galleries) <- case galleryParam of
+                           Nothing -> liftIO $ do
+                                             gs <-  topLevelGalleries db
+                                             return ("Image galleries", gs)
+                           Just g -> liftIO $ do
+                                             let gName = LU.toString $ inputValue g
+                                             gs <- childGalleries db gName
+                                             return (gName, gs)
   authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sess) galleries
   authorizedGalleryHeadlines <- liftIO $ mapM (readHeadline db) authorizedGalleries
-  ok $ toResponse $ X.body X.<< galleriesDiv authorizedGalleryHeadlines
+  ok $ toResponse $ X.body X.<< galleriesDiv header authorizedGalleryHeadlines
+
+-- | Name of URI parameter giving gallery name
+galleryParameter :: String
+galleryParameter = "gallery"
 
 -- | Gallery name, number of pictures, and if non-zero, latest picture, and upload date
 data GalleryHeadline =  GalleryHeadline {gName ::String,             -- ^Name of gallery
@@ -181,7 +196,7 @@ data GalleryHeadline =  GalleryHeadline {gName ::String,             -- ^Name of
 readHeadline :: Database -> Gallery -> IO GalleryHeadline
 readHeadline db gallery = do
   -- get the list of all (recursive) child gallery names
-  gNames <- unfoldTreeM_BF (childGalleries db) (name gallery)
+  gNames <- unfoldTreeM_BF (childGalleryNames db) (name gallery)
   imageNumbers <- mapM (images db) (Data.Tree.flatten gNames)
   let indices = nub (concat imageNumbers)
   recentUpload <- mostRecentImage db indices
@@ -201,14 +216,14 @@ mostRecentImage db indices =
          return $ Just (head rs DB.! IT.thumbnail, head rs DB.! IT.uploadTime)
 
 -- | Display headline list of galleries      
-galleriesDiv :: [GalleryHeadline] -> X.Html
-galleriesDiv galleries =
-    X.thediv X.<< (X.h1 X.<< "Image galleries" X.+++ X.thediv X.<< map displayGallery galleries)
+galleriesDiv :: String -> [GalleryHeadline] -> X.Html
+galleriesDiv header galleries =
+    X.thediv X.<< (X.h1 X.<< header X.+++ X.thediv X.<< map displayGallery galleries)
 
 -- | Display one gallery headline
 displayGallery :: GalleryHeadline -> X.Html
 displayGallery (GalleryHeadline name count picture) =
- X.thediv X.<< name X.+++
+ X.thediv X.<< (X.anchor X.! [X.href (imageGalleryURL ++ "?gallery=" ++ ( name))] X.<< name) X.+++
   let toBe = case count of
                1 -> "is "
                _ -> "are "
@@ -219,11 +234,11 @@ displayGallery (GalleryHeadline name count picture) =
        0 -> X.p X.<< "There are no pictures in this gallery"
        _ -> case picture of
              Just (image, date) -> ((X.image X.! [X.src image]) X.+++
-                                                               X.p X.<< ("There " ++ toBe ++ (show count) ++ pictureNoun ++ 
-                                                                    " in this gallery.")
-                                                               X.+++ (X.p X.<< 
-                                                                      ("Last updated: " 
-                                                                       ++ (calendarTimeToString date ++ " UTC"))))
+                                    X.p X.<< ("There " ++ toBe ++ (show count) ++ pictureNoun ++ 
+                                                           " in this gallery.")
+                                    X.+++ (X.p X.<< 
+                                                ("Last updated: " 
+                                                 ++ (calendarTimeToString date ++ " UTC"))))
 
 -- | Get list of all top-level galleries from database
 topLevelGalleries :: Database -> IO [Gallery]
@@ -236,14 +251,24 @@ topLevelGalleries db = do
   return $ map newGallery rs
 
 -- | Get list of names of all immediate child galleries of a named gallery
-childGalleries :: Database -> String -> IO (String, [String])
-childGalleries db gName = do
+childGalleryNames :: Database -> String -> IO (String, [String])
+childGalleryNames db gName = do
   let q = do
         t <- DB.table GT.galleryTable
         DB.restrict (t DB.! GT.parentGalleryName DB..==. DB.constJust gName)
         DB.project (GT.galleryName DB.<<  t DB.! GT.galleryName)
   rs <- DB.query db q
   return (gName, map (DB.! GT.galleryName) rs)
+
+-- | Get list of immediate child galleries of a named gallery
+childGalleries :: Database -> String -> IO [Gallery]
+childGalleries db gName = do
+  let q = do
+        t <- DB.table GT.galleryTable
+        DB.restrict (t DB.! GT.parentGalleryName DB..==. DB.constJust gName)
+        return t
+  rs <- DB.query db q
+  return $ map newGallery rs
 
 -- | get the (non-recursive) image indexNumbers from a given named gallery
 images :: Database -> String -> IO [Integer]

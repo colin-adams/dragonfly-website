@@ -150,7 +150,7 @@ previewImageUpload udata env sub frm = do
                  liftIO $ makeTempImagePermanent fnames
                  saveToDatabase fnames imageType
                  exif <- liftIO $ exifData False fname
-                 okHtml $ displayPreview (caption udata) (description udata) previewName exif
+                 okHtml $ displayPreview (caption udata) (description udata) previewName fname exif
                else do
                  saveToDatabase fnames imageType
                  displayPreviewPage udata dir fnames imageType env frm
@@ -164,7 +164,7 @@ previewImageUpload udata env sub frm = do
                liftIO $ save_files dir fnames imageType
                saveToDatabase fnames imageType
                exif <- liftIO $ exifData False fname
-               okHtml $ displayPreview (caption udata) (description udata) previewName exif
+               okHtml $ displayPreview (caption udata) (description udata) previewName fname exif
              else do
                displayPreviewPage udata dir fnames imageType env frm
          else displayInvalidImage f env frm
@@ -180,7 +180,7 @@ displayPreviewPage udata dir fnames@(thumbnailName, previewName, fname) imageTyp
   liftIO $ save_files dir fnames imageType
   exif <- liftIO $ exifData True fname
   xhtml <- createPreviewSubmit (displayPreview (caption udata) (description udata) 
-                               ("temp/" ++ previewName) exif) (enhancedEnvironment fname imageType env) frm
+                               ("temp/" ++ previewName) ("temp/" ++ fname) exif) (enhancedEnvironment fname imageType env) frm
   okHtml xhtml
 
 -- | Save image files to disk
