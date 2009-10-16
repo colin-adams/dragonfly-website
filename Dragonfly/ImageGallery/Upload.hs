@@ -21,8 +21,6 @@ import Database.HaskellDB  (Database, (<<-), (#))
 
 import Directory (doesFileExist)
 
-import Graphics.GD
-
 import Happstack.Server
 
 import Network.URL
@@ -62,16 +60,6 @@ uploadImagePage user = do
   gs <- liftIO $ allGalleries db
   withPreviewForm X.noHtml [] (uploadImageForm gs gNames) (True, False)
                   showErrorsInline previewImageUpload
-
--- | Gathered form data
-data UploadData = UploadData { 
-      caption :: String,
-      galleryNames :: [String],
-      imageFile :: F.File,
-      description :: String,
-      previousFileName :: String,
-      previousCT :: String
-                             } deriving Show
 
 -- | Process form for GET and PUT methods with preview button, and/or submit button
 withPreviewForm :: X.HTML b => b -- ^ Optional HTML fragment to prepend to form
@@ -161,7 +149,7 @@ previewImageUpload udata env sub frm = do
            liftIO $ LB.writeFile (dir ++ fname) contents
            if sub 
              then do
-               liftIO $ save_files dir fnames imageType
+               liftIO $ saveFiles dir fnames imageType
                saveToDatabase fnames imageType
                exif <- liftIO $ exifData False fname
                okHtml $ displayPreview (caption udata) (description udata) previewName fname exif
@@ -172,40 +160,6 @@ previewImageUpload udata env sub frm = do
          ApplicationState db _ <- ask
          liftIO $ DB.transaction db (saveImageInfo db (caption udata) (description udata) 
                             (galleryNames udata) imageType fnames)
-
--- | Display preview image and options to confirm or change
-displayPreviewPage :: UploadData -> String -> (String, String, String) -> String ->
-                     F.Env -> XForm UploadData -> MyServerPartT Response
-displayPreviewPage udata dir fnames@(thumbnailName, previewName, fname) imageType env frm = do
-  liftIO $ save_files dir fnames imageType
-  exif <- liftIO $ exifData True fname
-  xhtml <- createPreviewSubmit (displayPreview (caption udata) (description udata) 
-                               ("temp/" ++ previewName) ("temp/" ++ fname) exif) (enhancedEnvironment fname imageType env) frm
-  okHtml xhtml
-
--- | Save image files to disk
-save_files :: String -> (String, String, String) -> String -> IO ()
-save_files dir fnames@(thumbnailName, previewName, fname) imageType = do
-  case imageType of
-    "jpeg" -> do -- TODO png and gif
-      image <- liftIO $ loadJpegFile (dir ++ fname)
-      -- TODO - constants for sizes and quality - also need to maintain aspect ratio
-      previewImage <- liftIO $ resizeImage 640 400 image
-      liftIO $ saveJpegFile 85 (dir ++ previewName) previewImage
-      thumbnailImage <- liftIO $ resizeImage 120 80 image
-      liftIO $ saveJpegFile 70 (dir ++ thumbnailName) thumbnailImage
-
-enhancedEnvironment :: String -> String -> F.Env -> F.Env
-enhancedEnvironment fname imageType env =
-    let count = length env
-        prologue = take (count - 2) env 
-        fnameKey = fst (env !! (count - 2))
-        ctKey = fst (env !! (count - 1))
-        fnamePair = (fnameKey, Left fname)
-        ctPair = (ctKey, Left imageType)
-    in if length imageType == 0
-       then env
-       else prologue ++ (fnamePair:[ctPair])
 
 -- | Re-display the form with a request to select a file
 displayNoFileError :: F.Env -- ^ Environment of previous form values

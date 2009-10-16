@@ -8,7 +8,10 @@ module Dragonfly.ImageGallery.ImageGallery (
                                             imageDirectory,
                                             tempDirectory,
                                             displayPreview,
-                                            exifData
+                                            exifData,
+                                            UploadData(..),
+                                            displayPreviewPage,
+                                            saveFiles
                                            ) where
 
 import Control.Monad.Reader
@@ -26,6 +29,7 @@ import qualified Database.GalleryImageTable as GIT
 import qualified Database.ImageTable as IT
 
 import Graphics.Exif
+import Graphics.GD
 
 import Happstack.Server.SimpleHTTP
 import Happstack.Server.HTTP.FileServe
@@ -33,6 +37,7 @@ import Happstack.Server.HTTP.FileServe
 import System.Environment
 import System.Time
 
+import qualified Text.XHtml.Strict.Formlets as F
 import qualified Text.XHtml.Strict as X
 import Text.Pandoc.Shared
 import Text.Pandoc.Readers.Markdown
@@ -43,6 +48,7 @@ import qualified Dragonfly.Authorization.Authorities as Auth
 import Dragonfly.URISpace (imageGalleryURL)
 import qualified Dragonfly.Authorization.User as U
 import Dragonfly.ImageGallery.Exif
+import Dragonfly.Forms
 
 -- | File-system directory where uploaded images are stored
 imageDirectory :: IO String
@@ -167,29 +173,98 @@ handleImageGallery = dir (tail imageGalleryURL) $ do
       sc = lookup sessionCookie cookies
       params = rqInputs rq
       galleryParam = lookup galleryParameter params
+      previewParam = lookup previewParameter params
+  case previewParam of
+       Just p -> displayPreviewPicture $ LU.toString $ inputValue p
+       Nothing -> do
+         ApplicationState db sessions <- lift ask
+         sess <- liftIO $ readMVar sessions
+         (header, galleries) <- case galleryParam of
+                                  Nothing -> liftIO $ do
+                                                    gs <-  topLevelGalleries db
+                                                    return ("Image galleries", gs)
+                                  Just g -> liftIO $ do
+                                                    let gName = LU.toString $ inputValue g
+                                                    gs <- childGalleries db gName
+                                                    return (gName, gs)
+         authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sess) galleries
+         authorizedGalleryHeadlines <- liftIO $ mapM (readHeadline db) authorizedGalleries
+         ok $ toResponse $ X.body X.<< galleriesDiv header authorizedGalleryHeadlines
 
-  ApplicationState db sessions <- lift ask
-  sess <- liftIO $ readMVar sessions
-  (header, galleries) <- case galleryParam of
-                           Nothing -> liftIO $ do
-                                             gs <-  topLevelGalleries db
-                                             return ("Image galleries", gs)
-                           Just g -> liftIO $ do
-                                             let gName = LU.toString $ inputValue g
-                                             gs <- childGalleries db gName
-                                             return (gName, gs)
-  authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sess) galleries
-  authorizedGalleryHeadlines <- liftIO $ mapM (readHeadline db) authorizedGalleries
-  ok $ toResponse $ X.body X.<< galleriesDiv header authorizedGalleryHeadlines
+
+-- | Gathered form data
+data UploadData = UploadData { 
+      caption :: String,
+      galleryNames :: [String],
+      imageFile :: F.File,
+      description :: String,
+      previousFileName :: String,
+      previousCT :: String
+                             } deriving Show
+
+-- TODO: -- thumbnail should have a unique index
+-- | ???
+displayPreviewPicture :: String -> MyServerPartT Response
+displayPreviewPicture thumbnailName = do
+  (previewName, original, caption, description, _uploadTime) <- liftIO $ pictureDetailsFromThumbnail thumbnailName
+  exif <- liftIO $ exifData False original
+  okHtml $ displayPreview caption description previewName original exif
+
+pictureDetailsFromThumbnail :: String -> Database -> IO (String, String, String, String, CalendarTime)
+pictureDetailsFromThumbnail thumbnailName db = do
+  let q = do 
+        t <- DB.table IT.imageTable
+        DB.restrict (t DB.! IT.thumbnail DB..==. DB.constant thumbnailName)
+        DB.project (IT.preview DB.<<  t DB.! IT.preview DB.)
+  rs <- DB.query db q
+  return $ (head rs DB.! IT.preview, head rs DB.! IT.original, head rs DB.! IT.uploadTime,  head rs DB.! IT.caption,  head rs DB.! IT.uploadTime)  
+
+-- | Display preview image and options to confirm or change
+displayPreviewPage :: UploadData -> String -> (String, String, String) -> String ->
+                     F.Env -> XForm UploadData -> MyServerPartT Response
+displayPreviewPage udata dir fnames@(thumbnailName, previewName, fname) imageType env frm = do
+  liftIO $ saveFiles dir fnames imageType
+  exif <- liftIO $ exifData True fname
+  xhtml <- createPreviewSubmit (displayPreview (caption udata) (description udata) 
+                               ("temp/" ++ previewName) ("temp/" ++ fname) exif) (enhancedEnvironment fname imageType env) frm
+  okHtml xhtml
+
+-- | Save image files to disk
+saveFiles :: String -> (String, String, String) -> String -> IO ()
+saveFiles dir fnames@(thumbnailName, previewName, fname) imageType = do
+  case imageType of
+    "jpeg" -> do -- TODO png and gif
+      image <- liftIO $ loadJpegFile (dir ++ fname)
+      -- TODO - constants for sizes and quality - also need to maintain aspect ratio
+      previewImage <- liftIO $ resizeImage 640 400 image
+      liftIO $ saveJpegFile 85 (dir ++ previewName) previewImage
+      thumbnailImage <- liftIO $ resizeImage 120 80 image
+      liftIO $ saveJpegFile 70 (dir ++ thumbnailName) thumbnailImage
+
+enhancedEnvironment :: String -> String -> F.Env -> F.Env
+enhancedEnvironment fname imageType env =
+    let count = length env
+        prologue = take (count - 2) env 
+        fnameKey = fst (env !! (count - 2))
+        ctKey = fst (env !! (count - 1))
+        fnamePair = (fnameKey, Left fname)
+        ctPair = (ctKey, Left imageType)
+    in if length imageType == 0
+       then env
+       else prologue ++ (fnamePair:[ctPair])
 
 -- | Name of URI parameter giving gallery name
 galleryParameter :: String
 galleryParameter = "gallery"
 
+-- | Name of URI parameter giving preview picture name
+previewParameter :: String
+previewParameter = "preview"
+
 -- | Gallery name, number of pictures, and if non-zero, latest picture, and upload date
 data GalleryHeadline =  GalleryHeadline {gName ::String,             -- ^Name of gallery
                                          count :: Int,               -- ^Number of pictures (including all in sub-galleries)
-                                         picture :: Maybe (String, CalendarTime) -- ^File name and upload time of latest picture 
+                                         picture :: Maybe (String, String, String, CalendarTime) -- ^File names and upload time of latest picture 
                                         }
 
 -- | Read in sufficient information to form a gallery headline display
@@ -203,7 +278,7 @@ readHeadline db gallery = do
   return $ GalleryHeadline (name gallery) (length indices) recentUpload
 
 -- | Most recent thumbnail-image from list
-mostRecentImage :: Database -> [Integer] -> IO (Maybe (String, CalendarTime))
+mostRecentImage :: Database -> [Integer] -> IO (Maybe (String, String, String, CalendarTime))
 mostRecentImage db indices =
   if null indices then return Nothing else
       do let q 
@@ -211,9 +286,9 @@ mostRecentImage db indices =
                       DB.restrict (t DB.! IT.indexNumber `DB._in` map DB.constant indices)
                       DB.order [DB.desc t IT.uploadTime]
                       DB.top 1
-                      DB.project (IT.thumbnail DB.<< t DB.! IT.thumbnail DB.# IT.uploadTime DB.<< t DB.! IT.uploadTime)
+                      return t
          rs <- DB.query db q
-         return $ Just (head rs DB.! IT.thumbnail, head rs DB.! IT.uploadTime)
+         return $ Just (head rs DB.! IT.thumbnail, head rs DB.! IT.preview, head rs DB.! IT.original, head rs DB.! IT.uploadTime)
 
 -- | Display headline list of galleries      
 galleriesDiv :: String -> [GalleryHeadline] -> X.Html
@@ -223,7 +298,7 @@ galleriesDiv header galleries =
 -- | Display one gallery headline
 displayGallery :: GalleryHeadline -> X.Html
 displayGallery (GalleryHeadline name count picture) =
- X.thediv X.<< (X.anchor X.! [X.href (imageGalleryURL ++ "?gallery=" ++ ( name))] X.<< name) X.+++
+ X.thediv X.<< (X.anchor X.! [X.href $ X.stringToHtmlString $ imageGalleryURL ++ "?" ++ galleryParameter ++ "=" ++ name] X.<< name) X.+++
   let toBe = case count of
                1 -> "is "
                _ -> "are "
@@ -233,12 +308,13 @@ displayGallery (GalleryHeadline name count picture) =
   in case count of
        0 -> X.p X.<< "There are no pictures in this gallery"
        _ -> case picture of
-             Just (image, date) -> ((X.image X.! [X.src image]) X.+++
+             Just (image, preview, original, date) -> ((X.anchor X.! [X.href $ X.stringToHtmlString previewRef] X.<< (X.image X.! [X.src image])) X.+++
                                     X.p X.<< ("There " ++ toBe ++ (show count) ++ pictureNoun ++ 
                                                            " in this gallery.")
                                     X.+++ (X.p X.<< 
                                                 ("Last updated: " 
                                                  ++ (calendarTimeToString date ++ " UTC"))))
+                 where previewRef = imageGalleryURL ++ "?" ++ previewParameter ++ "=" ++ preview
 
 -- | Get list of all top-level galleries from database
 topLevelGalleries :: Database -> IO [Gallery]
