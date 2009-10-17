@@ -202,29 +202,34 @@ data UploadData = UploadData {
       previousCT :: String
                              } deriving Show
 
--- TODO: -- thumbnail should have a unique index
--- | Show preview version of thumbnail, with EXIF and link to original
+-- TODO: -- preview should have a unique index
+-- | Show preview version of preview, with EXIF and link to original
 displayPreviewPicture :: String -> MyServerPartT Response
-displayPreviewPicture thumbnailName = do
+displayPreviewPicture previewName = do
   ApplicationState db _ <- ask
-  (previewName, original, caption, description, _uploadTime) <- liftIO $ pictureDetailsFromThumbnail thumbnailName db
-  exif <- liftIO $ exifData False original
-  okHtml $ displayPreview caption description previewName original exif
+  details <- liftIO $ pictureDetailsFromPreview previewName db
+  case details of
+    Nothing -> notFound $ toResponse (previewName ++ " was not found")
+    Just (thumbnail, original, caption, description, _uploadTime) -> do
+        exif <- liftIO $ exifData False original
+        okHtml $ displayPreview caption description previewName original exif
 
-pictureDetailsFromThumbnail :: String -> Database -> IO (String, String, String, String, CalendarTime)
-pictureDetailsFromThumbnail thumbnailName db = do
+pictureDetailsFromPreview :: String -> Database -> IO (Maybe (String, String, String, String, CalendarTime))
+pictureDetailsFromPreview previewName db = do
   let q = do 
         t <- DB.table IT.imageTable
-        DB.restrict (t DB.! IT.thumbnail DB..==. DB.constant thumbnailName)
-        DB.project (IT.preview DB.<<  t DB.! IT.preview DB.# 
+        DB.restrict (t DB.! IT.preview DB..==. DB.constant previewName)
+        DB.project (IT.thumbnail DB.<<  t DB.! IT.thumbnail DB.# 
                     IT.original DB.<<  t DB.! IT.original DB.# 
                     IT.caption DB.<<  t DB.! IT.caption DB.# 
                     IT.body DB.<<  t DB.! IT.body DB.# 
                     IT.uploadTime DB.<<  t DB.! IT.uploadTime
                    )
   rs <- DB.query db q
-  return (head rs DB.! IT.preview, head rs DB.! IT.original, head rs DB.! IT.caption,  
-          head rs DB.! IT.body,  head rs DB.! IT.uploadTime)  
+  if null rs
+     then return Nothing
+     else return $ Just (head rs DB.! IT.thumbnail, head rs DB.! IT.original, head rs DB.! IT.caption,  
+                         head rs DB.! IT.body,  head rs DB.! IT.uploadTime)  
 
 -- | Display preview image and options to confirm or change
 displayPreviewPage :: UploadData -> String -> (String, String, String) -> String ->
