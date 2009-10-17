@@ -17,7 +17,7 @@ import Data.Maybe (mapMaybe, fromJust)
 import Data.Tree
 
 import qualified Database.HaskellDB as DB
-import Database.HaskellDB  (Database, (<<-), (#))
+import Database.HaskellDB  (Database, (<<-), ( # ))
 
 import Directory (doesFileExist)
 
@@ -98,8 +98,8 @@ buildEnvironment (input, _) =
 toEnvElement :: (String, Input) -> (String, Either String F.File)
 toEnvElement (key, (Input cont fName ctype)) =
     case fName of
-      Just f -> (key, Right $ F.File cont (f) (toFormContentType ctype))
-      Nothing -> (key, Left $ LU.toString $ cont)
+      Just f -> (key, Right $ F.File cont f (toFormContentType ctype))
+      Nothing -> (key, Left $ LU.toString cont)
 
 -- | Drop submit and/or preview buttons
 noSubmit :: (String, Input) -> Bool
@@ -116,24 +116,20 @@ toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct
 -- | Process submitted form by showing preview page
 previewImageUpload :: UploadData -> F.Env -> Bool -> XForm UploadData -> MyServerPartT Response
 previewImageUpload udata env sub frm = do
-  iDir <- liftIO $ imageDirectory
+  iDir <- liftIO imageDirectory
   let f = imageFile udata
-      dir = case sub of
-              True -> iDir
-              False -> tempDirectory
+      dir = if sub then iDir else tempDirectory
   let contents = F.content f
-      (usePrevious, fName, imageType) = case LB.length contents == 0 of
-             True -> (True, previousFileName udata, previousCT udata)
-             False -> (False, F.fileName $ imageFile udata, F.ctSubtype $ F.contentType $ imageFile udata)
+      (usePrevious, fName, imageType) = if LB.length contents == 0
+       then (True, previousFileName udata, previousCT udata)
+       else (False, F.fileName $ imageFile udata, F.ctSubtype $ F.contentType $ imageFile udata)
   fnames@(thumbnailName, previewName, fname) <- liftIO $ imageNames fName (not sub)
   if usePrevious
     then
-       if length fName == 0 
+       if null fName
         then displayNoFileError env frm
-        else do
-          if validImageType imageType
-           then do
-             if sub 
+        else if validImageType imageType
+           then if sub 
                then do
                  liftIO $ makeTempImagePermanent fnames
                  saveToDatabase fnames imageType
@@ -153,8 +149,7 @@ previewImageUpload udata env sub frm = do
                saveToDatabase fnames imageType
                exif <- liftIO $ exifData False fname
                okHtml $ displayPreview (caption udata) (description udata) previewName fname exif
-             else do
-               displayPreviewPage udata dir fnames imageType env frm
+             else displayPreviewPage udata dir fnames imageType env frm
          else displayInvalidImage f env frm
  where saveToDatabase fnames imageType = do
          ApplicationState db _ <- ask
@@ -165,9 +160,8 @@ previewImageUpload udata env sub frm = do
 displayNoFileError :: F.Env -- ^ Environment of previous form values
                    -> XForm UploadData   -- ^ Form to display
                    -> MyServerPartT Response 
-displayNoFileError env frm = do
-    xhtml <- createPreview (X.p X.<< "You must select a file") env frm
-    okHtml xhtml
+displayNoFileError env frm =
+    createPreview (X.p X.<< "You must select a file") env frm >>= okHtml
 
 -- | Move temporary files to permanent directory
 makeTempImagePermanent :: (String, String, String) -> IO ()
@@ -184,9 +178,8 @@ displayInvalidImage :: F.File -- ^ File that was uploaded
                     -> F.Env -- ^ Environment of previous form values
                     -> XForm UploadData   -- ^ Form to display
                     -> MyServerPartT Response 
-displayInvalidImage file env frm = do 
-    xhtml <- createPreview (X.p X.<< (F.fileName file ++ " is not a supported image type")) env frm
-    okHtml xhtml
+displayInvalidImage file env frm =
+    createPreview (X.p X.<< (F.fileName file ++ " is not a supported image type")) env frm >>= okHtml
 
 -- | Names of thumbnail, preview and original images respectively
 imageNames :: String -> Bool -> IO (String, String, String)
@@ -204,9 +197,9 @@ saveImageInfo db caption description galleries imageType (thumbnailName, preview
         DB.order [DB.desc t IT.indexNumber]
         DB.project (IT.indexNumber DB.<< t DB.! IT.indexNumber)
   rs <- DB.query db q
-  let nextIndex = case null rs of
-                    True -> 1
-                    False -> 1 + (head rs DB.! IT.indexNumber)
+  let nextIndex = if null rs
+                  then 1
+                  else 1 + (head rs DB.! IT.indexNumber)
   ct <- getClockTime 
   let utc = toUTCTime ct
   DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # 
@@ -218,8 +211,8 @@ saveImageInfo db caption description galleries imageType (thumbnailName, preview
 -- | Process data from form
 uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
 uploadImageForm gs gNames = UploadData <$>  titleForm <*> 
-                            (gallerySelectFormlet (galleryTree gs gNames) (Just [chooseSelection]))
-                            <*> imageInputForm <*> descriptionForm <*> (F.hidden Nothing) <*> (F.hidden Nothing)
+                            gallerySelectFormlet (galleryTree gs gNames) (Just [chooseSelection]) <*>
+                            imageInputForm <*> descriptionForm <*> F.hidden Nothing <*> F.hidden Nothing
 
 -- | Gallery selection widget builder
 gallerySelectFormlet :: Tree (Gallery, Bool) -> F.XHtmlFormlet IO [String]
@@ -246,7 +239,7 @@ titleForm = form `F.check` F.ensure valid error
 descriptionForm :: XForm String
 descriptionForm = F.check form stripCRs 
     where form = "Description" `label` F.textarea (Just 8) (Just 80) (Just "")
-          stripCRs result = Success (filter ( not . (`elem` "\r")) result)
+          stripCRs = Success . filter ( not . (`elem` "\r"))
 
 -- | Prompt for image file
 imageInputForm :: XForm F.File
@@ -331,9 +324,9 @@ toPreview original =
 toOriginal :: Bool -> String -> IO String
 toOriginal isTemp fname = do
   iDir <- imageDirectory
-  let dir = case isTemp of
-              True -> tempDirectory
-              False -> iDir
+  let dir = if isTemp
+            then tempDirectory
+            else iDir
   exists <- doesFileExist (dir ++ fname)
   if exists then
       do

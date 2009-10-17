@@ -79,7 +79,7 @@ displayPreview caption description previewName originalName exif =
         desc = writeHtml defaultWriterOptions doc
     in (X.h1 X.<< X.stringToHtml caption) 
        X.+++ X.thediv X.<< desc X.+++ X.image X.! [X.src previewName]
-       X.+++ (exifDiv exif)
+       X.+++ exifDiv exif
        X.+++ X.thediv X.<< X.anchor X.! [X.href originalName] X.<< "original"
 
 -- | All interpretable EXIF data for fname                            
@@ -87,9 +87,9 @@ displayPreview caption description previewName originalName exif =
 exifData :: Bool -> String -> IO [(String, String)]
 exifData isTemp fname = do
   iDir <- imageDirectory
-  let dir = case isTemp of
-                True -> tempDirectory
-                False -> iDir
+  let dir = if isTemp
+            then tempDirectory
+            else iDir
   exif <- fromFile (dir ++ fname)
   allTags exif
 
@@ -129,7 +129,7 @@ exifDiv tags =
 -- | XHtml table of Exif information
 tagTable :: [(String, Maybe String)] -> X.Html
 tagTable tags = 
-    X.table X.<< X.tbody X.<< (map tagDisplay tags)
+    X.table X.<< X.tbody X.<< map tagDisplay tags
 
 -- | XHtml fragment to display a tag    
 tagDisplay :: (String, Maybe String) -> X.Html
@@ -158,7 +158,7 @@ divImageGallery = X.thediv X.<< (X.anchor X.! [X.href imageGalleryURL] X.<< "Ima
 -- | Handler for images
 handleImages :: MyServerPartT Response 
 handleImages = do
-  iDir <- liftIO $ imageDirectory
+  iDir <- liftIO imageDirectory
   rq <- askRq
   let paths = rqPaths rq
   if null paths
@@ -203,10 +203,11 @@ data UploadData = UploadData {
                              } deriving Show
 
 -- TODO: -- thumbnail should have a unique index
--- | ???
+-- | Show preview version of thumbnail, with EXIF and link to original
 displayPreviewPicture :: String -> MyServerPartT Response
 displayPreviewPicture thumbnailName = do
-  (previewName, original, caption, description, _uploadTime) <- liftIO $ pictureDetailsFromThumbnail thumbnailName
+  ApplicationState db _ <- ask
+  (previewName, original, caption, description, _uploadTime) <- liftIO $ pictureDetailsFromThumbnail thumbnailName db
   exif <- liftIO $ exifData False original
   okHtml $ displayPreview caption description previewName original exif
 
@@ -215,9 +216,15 @@ pictureDetailsFromThumbnail thumbnailName db = do
   let q = do 
         t <- DB.table IT.imageTable
         DB.restrict (t DB.! IT.thumbnail DB..==. DB.constant thumbnailName)
-        DB.project (IT.preview DB.<<  t DB.! IT.preview DB.)
+        DB.project (IT.preview DB.<<  t DB.! IT.preview DB.# 
+                    IT.original DB.<<  t DB.! IT.original DB.# 
+                    IT.caption DB.<<  t DB.! IT.caption DB.# 
+                    IT.body DB.<<  t DB.! IT.body DB.# 
+                    IT.uploadTime DB.<<  t DB.! IT.uploadTime
+                   )
   rs <- DB.query db q
-  return $ (head rs DB.! IT.preview, head rs DB.! IT.original, head rs DB.! IT.uploadTime,  head rs DB.! IT.caption,  head rs DB.! IT.uploadTime)  
+  return (head rs DB.! IT.preview, head rs DB.! IT.original, head rs DB.! IT.caption,  
+          head rs DB.! IT.body,  head rs DB.! IT.uploadTime)  
 
 -- | Display preview image and options to confirm or change
 displayPreviewPage :: UploadData -> String -> (String, String, String) -> String ->
@@ -231,7 +238,7 @@ displayPreviewPage udata dir fnames@(thumbnailName, previewName, fname) imageTyp
 
 -- | Save image files to disk
 saveFiles :: String -> (String, String, String) -> String -> IO ()
-saveFiles dir fnames@(thumbnailName, previewName, fname) imageType = do
+saveFiles dir fnames@(thumbnailName, previewName, fname) imageType =
   case imageType of
     "jpeg" -> do -- TODO png and gif
       image <- liftIO $ loadJpegFile (dir ++ fname)
@@ -249,7 +256,7 @@ enhancedEnvironment fname imageType env =
         ctKey = fst (env !! (count - 1))
         fnamePair = (fnameKey, Left fname)
         ctPair = (ctKey, Left imageType)
-    in if length imageType == 0
+    in if null imageType
        then env
        else prologue ++ (fnamePair:[ctPair])
 
@@ -309,7 +316,7 @@ displayGallery (GalleryHeadline name count picture) =
        0 -> X.p X.<< "There are no pictures in this gallery"
        _ -> case picture of
              Just (image, preview, original, date) -> ((X.anchor X.! [X.href $ X.stringToHtmlString previewRef] X.<< (X.image X.! [X.src image])) X.+++
-                                    X.p X.<< ("There " ++ toBe ++ (show count) ++ pictureNoun ++ 
+                                    X.p X.<< ("There " ++ toBe ++ show count ++ pictureNoun ++ 
                                                            " in this gallery.")
                                     X.+++ (X.p X.<< 
                                                 ("Last updated: " 
