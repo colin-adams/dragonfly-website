@@ -20,6 +20,7 @@ import Control.Concurrent.MVar
 import qualified Data.ByteString.Lazy.UTF8 as LU
 import Data.List (nub)
 import qualified Data.Map as Map
+import Data.Ratio
 import Data.Tree
 
 import qualified Database.HaskellDB as DB
@@ -33,6 +34,8 @@ import Graphics.GD
 
 import Happstack.Server.SimpleHTTP
 import Happstack.Server.HTTP.FileServe
+
+import Numeric
 
 import System.Environment
 import System.Time
@@ -241,17 +244,41 @@ displayPreviewPage udata dir fnames@(thumbnailName, previewName, fname) imageTyp
                                ("temp/" ++ previewName) ("temp/" ++ fname) exif) (enhancedEnvironment fname imageType env) frm
   okHtml xhtml
 
+-- | Desired width for thumbnails in pixels
+widthThumbnail :: Integer
+widthThumbnail = 120
+
+-- | Desired width for previews in pixels
+widthPreview :: Integer
+widthPreview = 640
+
+-- | Computed height for images in pixels
+height :: Integer -> Rational -> Int
+height width ratio = 
+    let answerRatio = (width % 1) * ratio
+        answer = fromRat answerRatio :: Double
+    in floor answer
+
+-- | Quality of saved JPEG preview images
+imageQuality :: Int
+imageQuality = 85
+
+-- | Quality of saved JPEG thumbnail images
+thumbnailImageQuality :: Int
+thumbnailImageQuality = 70
+
 -- | Save image files to disk
 saveFiles :: String -> (String, String, String) -> String -> IO ()
 saveFiles dir fnames@(thumbnailName, previewName, fname) imageType =
   case imageType of
     "jpeg" -> do -- TODO png and gif
       image <- liftIO $ loadJpegFile (dir ++ fname)
-      -- TODO - constants for sizes and quality - also need to maintain aspect ratio
-      previewImage <- liftIO $ resizeImage 640 400 image
-      liftIO $ saveJpegFile 85 (dir ++ previewName) previewImage
-      thumbnailImage <- liftIO $ resizeImage 120 80 image
-      liftIO $ saveJpegFile 70 (dir ++ thumbnailName) thumbnailImage
+      (w, h) <- liftIO $ imageSize image
+      let ratio = fromIntegral h % fromIntegral w
+      previewImage <- liftIO $ resizeImage (fromIntegral widthPreview) (height widthPreview ratio) image
+      liftIO $ saveJpegFile imageQuality (dir ++ previewName) previewImage
+      thumbnailImage <- liftIO $ resizeImage (fromIntegral widthThumbnail)(height widthThumbnail ratio) image
+      liftIO $ saveJpegFile thumbnailImageQuality (dir ++ thumbnailName) thumbnailImage
 
 enhancedEnvironment :: String -> String -> F.Env -> F.Env
 enhancedEnvironment fname imageType env =
