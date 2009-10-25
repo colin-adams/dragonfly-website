@@ -202,7 +202,13 @@ displayGalleryTree galleryParam sc = do
   authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sess) galleries
   authorizedGalleryHeadlines <- liftIO $ mapM (readHeadline db) authorizedGalleries
   galDiv <- liftIO $ galleriesDiv header authorizedGalleryHeadlines db pictures
-  ok $ toResponse $ X.body << galDiv
+  ok $ toResponse $ galleryHeader +++ (X.body << galDiv)
+
+-- | Html head for galleries
+galleryHeader :: X.Html
+galleryHeader = X.header <<
+                (X.style X.! [X.thetype "text/css"]
+                  << "@import url(/styles/image_gallery.css);")
 
 -- | Gathered form data
 data UploadData = UploadData { 
@@ -342,7 +348,7 @@ mostRecentImage db indices =
 -- | Display headline list of galleries      
 galleriesDiv :: String -> [GalleryHeadline] -> Database -> [Integer] -> IO X.Html
 galleriesDiv header galleries db pics = do
-    let gallsDiv = X.thediv << map displayGallery galleries
+    let gallsDiv = X.thediv << X.ulist X.! [X.theclass "galleries"] << map displayGallery galleries
     picsDiv <- if null pics
               then return X.noHtml
               else picturesDiv db pics
@@ -365,7 +371,7 @@ picturesDiv db pics = do
       maximumThumbnails = 10
       indices = take maximumThumbnails (drop dropCount pics)
   picsInfo <- pictureInfo db indices
-  return $ X.thediv << X.ulist << X.concatHtml (map pictureInfoItem picsInfo)
+  return $ X.thediv << X.ulist X.! [X.theclass "images"] << X.concatHtml (map pictureInfoItem picsInfo)
 
 pictureInfoItem :: PictureInfo -> X.Html
 pictureInfoItem (thumbnail, preview, caption, uploadTime, user) =
@@ -393,7 +399,7 @@ newPictureInfo rec = (rec DB.! IT.thumbnail, rec DB.! IT.preview, rec DB.! IT.ca
 -- | Display one gallery headline
 displayGallery :: GalleryHeadline -> X.Html
 displayGallery (GalleryHeadline name count picture) =
- X.thediv << (X.anchor X.! [X.href $ X.stringToHtmlString $ imageGalleryURL ++ "?" ++ galleryParameter ++ "=" ++ name] << name) +++
+ X.li << (X.anchor X.! [X.href $ X.stringToHtmlString $ imageGalleryURL ++ "?" ++ galleryParameter ++ "=" ++ name] << name) +++
   let toBe = case count of
                1 -> "is "
                _ -> "are "
