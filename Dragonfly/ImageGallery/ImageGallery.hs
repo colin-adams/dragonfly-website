@@ -354,7 +354,8 @@ galleriesDiv header galleries db pics = do
 type PictureInfo = (String, -- thumbnail name
                     String, -- preview name
                     String, -- title
-                    CalendarTime -- upload time
+                    CalendarTime, -- upload time
+                    String -- user name
                    )
 
 -- | HTML div showing first 10 thumbnails in gallery
@@ -367,9 +368,11 @@ picturesDiv db pics = do
   return $ X.thediv << X.ulist << X.concatHtml (map pictureInfoItem picsInfo)
 
 pictureInfoItem :: PictureInfo -> X.Html
-pictureInfoItem (thumbnail, preview, caption, uploadTime) =
+pictureInfoItem (thumbnail, preview, caption, uploadTime, user) =
     X.li << (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << X.image X.! [X.src thumbnail]) +++
-         (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << caption) 
+         X.h3 << X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << caption +++
+         X.thediv << ("Posted by: " ++ user) +++
+         X.thediv << calendarTimeToString uploadTime
     where previewRef = imageGalleryURL ++ "?" ++ previewParameter ++ "=" ++ preview                        
 
 pictureInfo :: Database -> [Integer] -> IO [PictureInfo]
@@ -384,7 +387,8 @@ pictureInfo db indices = do
 -- | Contruct a PictureInfo from its database record
 -- Signature commented out as it needs a really long context.
 --newPictureInfo :: DB.Record vr -> PictureInfo
-newPictureInfo rec = (rec DB.! IT.thumbnail, rec DB.! IT.preview, rec DB.! IT.caption, rec DB.! IT.uploadTime)
+newPictureInfo rec = (rec DB.! IT.thumbnail, rec DB.! IT.preview, rec DB.! IT.caption,
+                      rec DB.! IT.uploadTime, rec DB.! IT.userName)
 
 -- | Display one gallery headline
 displayGallery :: GalleryHeadline -> X.Html

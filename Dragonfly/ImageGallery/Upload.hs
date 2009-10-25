@@ -59,7 +59,7 @@ uploadImagePage user = do
   gNames <- liftIO $ authorizedUploadGalleries user db
   gs <- liftIO $ allGalleries db
   withPreviewForm X.noHtml [] (uploadImageForm gs gNames) (True, False)
-                  showErrorsInline previewImageUpload
+                  showErrorsInline (previewImageUpload user)
 
 -- | Process form for GET and PUT methods with preview button, and/or submit button
 withPreviewForm :: X.HTML b => b -- ^ Optional HTML fragment to prepend to form
@@ -114,8 +114,8 @@ toFormContentType :: ContentType -> F.ContentType
 toFormContentType ct = F.ContentType (ctType ct) (ctSubtype ct) (ctParameters ct)
 
 -- | Process submitted form by showing preview page
-previewImageUpload :: UploadData -> F.Env -> Bool -> XForm UploadData -> MyServerPartT Response
-previewImageUpload udata env sub frm = do
+previewImageUpload :: User -> UploadData -> F.Env -> Bool -> XForm UploadData -> MyServerPartT Response
+previewImageUpload user udata env sub frm = do
   iDir <- liftIO imageDirectory
   let f = imageFile udata
       dir = if sub then iDir else tempDirectory
@@ -153,7 +153,7 @@ previewImageUpload udata env sub frm = do
          else displayInvalidImage f env frm
  where saveToDatabase fnames imageType = do
          ApplicationState db _ <- ask
-         liftIO $ DB.transaction db (saveImageInfo db (caption udata) (description udata) 
+         liftIO $ DB.transaction db (saveImageInfo user db (caption udata) (description udata) 
                             (galleryNames udata) imageType fnames)
 
 -- | Re-display the form with a request to select a file
@@ -190,8 +190,8 @@ imageNames file isTemp = do
   return (thumbnailName, previewName, original)
 
 -- | Save image information to database
-saveImageInfo :: Database -> String -> String -> [String] -> String -> (String, String, String) -> IO ()
-saveImageInfo db caption description galleries imageType (thumbnailName, previewName, originalName) = do
+saveImageInfo :: User -> Database -> String -> String -> [String] -> String -> (String, String, String) -> IO ()
+saveImageInfo user db caption description galleries imageType (thumbnailName, previewName, originalName) = do
   let q = do
         t <- DB.table IT.imageTable
         DB.order [DB.desc t IT.indexNumber]
@@ -205,7 +205,7 @@ saveImageInfo db caption description galleries imageType (thumbnailName, preview
   DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # 
                                 IT.body <<- description # IT.thumbnail <<- thumbnailName # 
                                 IT.preview <<- previewName # IT.original <<- originalName # 
-                                IT.uploadTime <<- utc # IT.imageType <<- imageType)
+                                IT.uploadTime <<- utc # IT.imageType <<- imageType # IT.userName <<- ( Dragonfly.Authorization.User.name user))
   mapM_ (\name -> DB.insert db GIT.galleryImageTable (GIT.galleryName <<- name # GIT.indexNumber <<- nextIndex)) galleries
 
 -- | Process data from form
