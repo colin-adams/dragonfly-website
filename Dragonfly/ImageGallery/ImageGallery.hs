@@ -42,6 +42,7 @@ import System.Time
 
 import qualified Text.XHtml.Strict.Formlets as F
 import qualified Text.XHtml.Strict as X
+import Text.XHtml.Strict ((<<), (+++)) 
 import Text.Pandoc.Shared
 import Text.Pandoc.Readers.Markdown
 import Text.Pandoc.Writers.HTML
@@ -80,10 +81,10 @@ displayPreview :: String -> String -> String -> String -> [(String, String)] -> 
 displayPreview caption description previewName originalName exif =
     let doc = readMarkdown defaultParserState description
         desc = writeHtml defaultWriterOptions doc
-    in (X.h1 X.<< X.stringToHtml caption) 
-       X.+++ X.thediv X.<< desc X.+++ X.image X.! [X.src previewName]
-       X.+++ exifDiv exif
-       X.+++ X.thediv X.<< X.anchor X.! [X.href originalName] X.<< "original"
+    in (X.h1 << X.stringToHtml caption) 
+       +++ X.thediv << desc +++ X.image X.! [X.src previewName]
+       +++ exifDiv exif
+       +++ X.thediv << X.anchor X.! [X.href originalName] << "original"
 
 -- | All interpretable EXIF data for fname                            
 -- currently excludes MakerNote
@@ -127,19 +128,19 @@ exifDiv tags =
                  (gpsLongRefI, longR), (gpsLongI, long),
                  (gpsAltRefI, altR), (gpsAltI, alt)
                 ]
-    in X.thediv X.<< tagTable pairs
+    in X.thediv << tagTable pairs
    
 -- | XHtml table of Exif information
 tagTable :: [(String, Maybe String)] -> X.Html
 tagTable tags = 
-    X.table X.<< X.tbody X.<< map tagDisplay tags
+    X.table << X.tbody << map tagDisplay tags
 
 -- | XHtml fragment to display a tag    
 tagDisplay :: (String, Maybe String) -> X.Html
 tagDisplay (tag, value) =
     case value of
       Nothing -> X.noHtml
-      Just v -> X.tr X.<< ((X.td X.<< X.stringToHtml tag) X.+++ (X.td X.<< X.stringToHtml v))
+      Just v -> X.tr << ((X.td << X.stringToHtml tag) +++ (X.td << X.stringToHtml v))
 
 -- | All galleries in database
 allGalleries :: Database -> IO [Gallery]
@@ -156,7 +157,7 @@ authorizedUploadGalleries user db = do
 
 -- | Html div to invoke image gallery
 divImageGallery :: X.Html
-divImageGallery = X.thediv X.<< (X.anchor X.! [X.href imageGalleryURL] X.<< "Image gallery")
+divImageGallery = X.thediv << (X.anchor X.! [X.href imageGalleryURL] << "Image gallery")
 
 -- | Handler for images
 handleImages :: MyServerPartT Response 
@@ -179,21 +180,29 @@ handleImageGallery = dir (tail imageGalleryURL) $ do
       previewParam = lookup previewParameter params
   case previewParam of
        Just p -> displayPreviewPicture $ LU.toString $ inputValue p
-       Nothing -> do
-         ApplicationState db sessions <- lift ask
-         sess <- liftIO $ readMVar sessions
-         (header, galleries) <- case galleryParam of
-                                  Nothing -> liftIO $ do
-                                                    gs <-  topLevelGalleries db
-                                                    return ("Image galleries", gs)
-                                  Just g -> liftIO $ do
-                                                    let gName = LU.toString $ inputValue g
-                                                    gs <- childGalleries db gName
-                                                    return (gName, gs)
-         authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sess) galleries
-         authorizedGalleryHeadlines <- liftIO $ mapM (readHeadline db) authorizedGalleries
-         ok $ toResponse $ X.body X.<< galleriesDiv header authorizedGalleryHeadlines
+       Nothing -> displayGalleryTree galleryParam sc
 
+-- | Display a gallery tree and immedaite child pictures
+displayGalleryTree :: Maybe Input -> Maybe Cookie -> MyServerPartT Response
+displayGalleryTree galleryParam sc = do
+  ApplicationState db sessions <- lift ask
+  sess <- liftIO $ readMVar sessions
+  (header, galleries, pictures) <- 
+      case galleryParam of
+        Nothing -> liftIO $ 
+                  do
+                    gs <-  topLevelGalleries db
+                    return ("Image galleries", gs, [])
+        Just g -> liftIO $
+                 do
+                   let gName = LU.toString $ inputValue g
+                   gs <- childGalleries db gName
+                   pics <- images db gName
+                   return (gName, gs, pics)
+  authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sess) galleries
+  authorizedGalleryHeadlines <- liftIO $ mapM (readHeadline db) authorizedGalleries
+  galDiv <- liftIO $ galleriesDiv header authorizedGalleryHeadlines db pictures
+  ok $ toResponse $ X.body << galDiv
 
 -- | Gathered form data
 data UploadData = UploadData { 
@@ -205,7 +214,7 @@ data UploadData = UploadData {
       previousCT :: String
                              } deriving Show
 
--- TODO: -- preview should have a unique index
+-- TODO: -- previewTable should have a unique index
 -- | Show preview version of preview, with EXIF and link to original
 displayPreviewPicture :: String -> MyServerPartT Response
 displayPreviewPicture previewName = do
@@ -327,33 +336,78 @@ mostRecentImage db indices =
                       DB.top 1
                       return t
          rs <- DB.query db q
-         return $ Just (head rs DB.! IT.thumbnail, head rs DB.! IT.preview, head rs DB.! IT.original, head rs DB.! IT.uploadTime)
+         return $ Just (head rs DB.! IT.thumbnail, head rs DB.! IT.preview, 
+                             head rs DB.! IT.original, head rs DB.! IT.uploadTime)
 
 -- | Display headline list of galleries      
-galleriesDiv :: String -> [GalleryHeadline] -> X.Html
-galleriesDiv header galleries =
-    X.thediv X.<< (X.h1 X.<< header X.+++ X.thediv X.<< map displayGallery galleries)
+galleriesDiv :: String -> [GalleryHeadline] -> Database -> [Integer] -> IO X.Html
+galleriesDiv header galleries db pics = do
+    let gallsDiv = X.thediv << map displayGallery galleries
+    picsDiv <- if null pics
+              then return X.noHtml
+              else picturesDiv db pics
+    return $ X.thediv << (X.h1 << header)
+       +++ gallsDiv
+       +++ picsDiv
+
+-- | details of a single picture from database
+type PictureInfo = (String, -- thumbnail name
+                    String, -- preview name
+                    String, -- title
+                    CalendarTime -- upload time
+                   )
+
+-- | HTML div showing first 10 thumbnails in gallery
+picturesDiv :: Database -> [Integer] -> IO X.Html
+picturesDiv db pics = do
+  let dropCount = 0
+      maximumThumbnails = 10
+      indices = take maximumThumbnails (drop dropCount pics)
+  picsInfo <- pictureInfo db indices
+  return $ X.thediv << X.ulist << X.concatHtml (map pictureInfoItem picsInfo)
+
+pictureInfoItem :: PictureInfo -> X.Html
+pictureInfoItem (thumbnail, preview, caption, uploadTime) =
+    X.li << (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << X.image X.! [X.src thumbnail]) +++
+         (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << caption) 
+    where previewRef = imageGalleryURL ++ "?" ++ previewParameter ++ "=" ++ preview                        
+
+pictureInfo :: Database -> [Integer] -> IO [PictureInfo]
+pictureInfo db indices = do
+  let q = do
+        t <- DB.table IT.imageTable
+        DB.restrict (t DB.! IT.indexNumber `DB._in` map DB.constant indices)
+        return t
+  rs <- DB.query db q
+  return $ map newPictureInfo rs 
+
+-- | Contruct a PictureInfo from its database record
+-- Signature commented out as it needs a really long context.
+--newPictureInfo :: DB.Record vr -> PictureInfo
+newPictureInfo rec = (rec DB.! IT.thumbnail, rec DB.! IT.preview, rec DB.! IT.caption, rec DB.! IT.uploadTime)
 
 -- | Display one gallery headline
 displayGallery :: GalleryHeadline -> X.Html
 displayGallery (GalleryHeadline name count picture) =
- X.thediv X.<< (X.anchor X.! [X.href $ X.stringToHtmlString $ imageGalleryURL ++ "?" ++ galleryParameter ++ "=" ++ name] X.<< name) X.+++
+ X.thediv << (X.anchor X.! [X.href $ X.stringToHtmlString $ imageGalleryURL ++ "?" ++ galleryParameter ++ "=" ++ name] << name) +++
   let toBe = case count of
                1 -> "is "
                _ -> "are "
       pictureNoun = case count of
                       1 -> " picture"
                       _ -> " pictures"
+      pictureCountPhrase = "There " ++ toBe ++ show count ++ pictureNoun ++ " in this gallery."
   in case count of
-       0 -> X.p X.<< "There are no pictures in this gallery"
+       0 -> X.p << "There are no pictures in this gallery"
        _ -> case picture of
-             Just (image, preview, original, date) -> ((X.anchor X.! [X.href $ X.stringToHtmlString previewRef] X.<< (X.image X.! [X.src image])) X.+++
-                                    X.p X.<< ("There " ++ toBe ++ show count ++ pictureNoun ++ 
-                                                           " in this gallery.")
-                                    X.+++ (X.p X.<< 
-                                                ("Last updated: " 
-                                                 ++ (calendarTimeToString date ++ " UTC"))))
-                 where previewRef = imageGalleryURL ++ "?" ++ previewParameter ++ "=" ++ preview
+             Just (image, preview, original, date) -> 
+                 (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << 
+                        (X.image X.! [X.src image])) +++
+                 X.p << pictureCountPhrase +++ X.p << updatedPhrase
+                 where previewRef = imageGalleryURL ++ "?" ++ previewParameter ++
+                                    "=" ++ preview
+                       updatedPhrase = "Last updated: " ++ 
+                                       calendarTimeToString date ++ " UTC"
 
 -- | Get list of all top-level galleries from database
 topLevelGalleries :: Database -> IO [Gallery]
