@@ -188,17 +188,17 @@ displayGalleryTree galleryParam sc = do
   ApplicationState db sessions <- lift ask
   sess <- liftIO $ readMVar sessions
   (header, galleries, pictures) <- 
-      case galleryParam of
-        Nothing -> liftIO $ 
-                  do
-                    gs <-  topLevelGalleries db
-                    return ("Image galleries", gs, [])
-        Just g -> liftIO $
-                 do
-                   let gName = LU.toString $ inputValue g
-                   gs <- childGalleries db gName
-                   pics <- images db gName
-                   return (gName, gs, pics)
+    case galleryParam of
+      Nothing -> liftIO $ 
+                do
+                  gs <-  topLevelGalleries db
+                  return ("Image galleries", gs, [])
+      Just g -> liftIO $
+               do
+                 let gName = LU.toString $ inputValue g
+                 gs <- childGalleries db gName
+                 pics <- images db gName
+                 return (gName, gs, pics)
   authorizedGalleries <- liftIO $ filterM (isGalleryAuthorized sc sess) galleries
   authorizedGalleryHeadlines <- liftIO $ mapM (readHeadline db) authorizedGalleries
   galDiv <- liftIO $ galleriesDiv header authorizedGalleryHeadlines db pictures
@@ -208,7 +208,7 @@ displayGalleryTree galleryParam sc = do
 galleryHeader :: X.Html
 galleryHeader = X.header <<
                 (X.style X.! [X.thetype "text/css"]
-                  << "@import url(/styles/image_gallery.css);")
+                  << "@import url(/styles/defaults.css); @import url(/styles/system.css); @import url(/styles/image_gallery.css); @import url(/styles/style.css);")
 
 -- | Gathered form data
 data UploadData = UploadData { 
@@ -348,11 +348,11 @@ mostRecentImage db indices =
 -- | Display headline list of galleries      
 galleriesDiv :: String -> [GalleryHeadline] -> Database -> [Integer] -> IO X.Html
 galleriesDiv header galleries db pics = do
-    let gallsDiv = X.thediv << X.ulist X.! [X.theclass "galleries"] << map displayGallery galleries
+    let gallsDiv = X.ulist X.! [X.theclass "galleries"] << map displayGallery galleries
     picsDiv <- if null pics
               then return X.noHtml
               else picturesDiv db pics
-    return $ X.thediv << (X.h1 << header)
+    return $ X.h1 << header
        +++ gallsDiv
        +++ picsDiv
 
@@ -371,15 +371,16 @@ picturesDiv db pics = do
       maximumThumbnails = 10
       indices = take maximumThumbnails (drop dropCount pics)
   picsInfo <- pictureInfo db indices
-  return $ X.thediv << X.ulist X.! [X.theclass "images"] << X.concatHtml (map pictureInfoItem picsInfo)
+  return $ X.ulist X.! [X.theclass "images"] << X.concatHtml (map pictureInfoItem picsInfo)
 
 pictureInfoItem :: PictureInfo -> X.Html
 pictureInfoItem (thumbnail, preview, caption, uploadTime, user) =
-    X.li << (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << X.image X.! [X.src thumbnail]) +++
-         X.h3 << X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << caption +++
-         X.thediv << ("Posted by: " ++ user) +++
-         X.thediv << calendarTimeToString uploadTime
-    where previewRef = imageGalleryURL ++ "?" ++ previewParameter ++ "=" ++ preview                        
+    X.li X.! [X.thestyle "height : 175px; width : 100px;"] << itemContents
+      where itemContents = (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << X.image X.! [X.src thumbnail]) +++ itemTrailer
+            itemTrailer = X.h3 << X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << caption +++
+                          X.thediv X.! [X.theclass "author"] << ("Posted by: " ++ user) +++
+                          X.thediv X.! [X.theclass "date"] << calendarTimeToString uploadTime
+            previewRef = imageGalleryURL ++ "?" ++ previewParameter ++ "=" ++ preview                        
 
 pictureInfo :: Database -> [Integer] -> IO [PictureInfo]
 pictureInfo db indices = do
@@ -399,25 +400,27 @@ newPictureInfo rec = (rec DB.! IT.thumbnail, rec DB.! IT.preview, rec DB.! IT.ca
 -- | Display one gallery headline
 displayGallery :: GalleryHeadline -> X.Html
 displayGallery (GalleryHeadline name count picture) =
- X.li << (X.anchor X.! [X.href $ X.stringToHtmlString $ imageGalleryURL ++ "?" ++ galleryParameter ++ "=" ++ name] << name) +++
-  let toBe = case count of
-               1 -> "is "
-               _ -> "are "
-      pictureNoun = case count of
-                      1 -> " picture"
-                      _ -> " pictures"
-      pictureCountPhrase = "There " ++ toBe ++ show count ++ pictureNoun ++ " in this gallery."
-  in case count of
-       0 -> X.p << "There are no pictures in this gallery"
-       _ -> case picture of
-             Just (image, preview, original, date) -> 
-                 (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << 
-                        (X.image X.! [X.src image])) +++
-                 X.p << pictureCountPhrase +++ X.p << updatedPhrase
-                 where previewRef = imageGalleryURL ++ "?" ++ previewParameter ++
-                                    "=" ++ preview
-                       updatedPhrase = "Last updated: " ++ 
-                                       calendarTimeToString date ++ " UTC"
+ X.li X.! [X.theclass "clear-block"] << itemContents
+   where itemContents = (X.anchor X.! [X.href $ X.stringToHtmlString $ imageGalleryURL ++ "?" ++ galleryParameter ++ "=" ++ name] << name) +++ itemTail
+         itemTail = let toBe = case count of
+                          1 -> "is "
+                          _ -> "are "
+                        pictureNoun = case count of
+                          1 -> " picture"
+                          _ -> " pictures"
+                        pictureCountPhrase = "There " ++ toBe ++ show count ++ pictureNoun ++ " in this gallery."
+                    in case count of
+                      0 -> X.p << "There are no pictures in this gallery"
+                      _ -> case picture of
+                        Just (image, preview, original, date) -> 
+                          (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << 
+                           (X.image X.! [X.src image])) +++
+                          X.p X.! [X.theclass "count"] << pictureCountPhrase +++ 
+                          X.p X.! [X.theclass "last"] << updatedPhrase
+                            where previewRef = imageGalleryURL ++ "?" ++ previewParameter ++
+                                         "=" ++ preview
+                                  updatedPhrase = "Last updated: " ++ 
+                                            calendarTimeToString date ++ " UTC"
 
 -- | Get list of all top-level galleries from database
 topLevelGalleries :: Database -> IO [Gallery]
