@@ -16,8 +16,7 @@ import qualified Data.Foldable as Fo (foldr)
 import Data.Maybe (mapMaybe, fromJust)
 import Data.Tree
 
-import qualified Database.HaskellDB as DB
-import Database.HaskellDB  (Database, (<<-), ( # ))
+import Database.HaskellDB (transaction)
 
 import Directory (doesFileExist)
 
@@ -40,6 +39,7 @@ import qualified Database.GalleryImageTable as GIT
 import Dragonfly.ApplicationState
 import Dragonfly.Authorization.Auth
 import Dragonfly.Authorization.User
+import Dragonfly.ImageGallery.Database
 import Dragonfly.ImageGallery.ImageGallery
 import Dragonfly.URISpace (imageUploadURL)
 import Dragonfly.Forms
@@ -153,8 +153,8 @@ previewImageUpload user udata env sub frm = do
          else displayInvalidImage f env frm
  where saveToDatabase fnames imageType = do
          ApplicationState db _ <- ask
-         liftIO $ DB.transaction db (saveImageInfo user db (caption udata) (description udata) 
-                            (galleryNames udata) imageType fnames)
+         liftIO $ transaction db (saveImageInfo user db (caption udata) (description udata) 
+                                  (galleryNames udata) imageType fnames)
 
 -- | Re-display the form with a request to select a file
 displayNoFileError :: F.Env -- ^ Environment of previous form values
@@ -188,25 +188,6 @@ imageNames file isTemp = do
   let thumbnailName = toThumbnail original
       previewName = toPreview original
   return (thumbnailName, previewName, original)
-
--- | Save image information to database
-saveImageInfo :: User -> Database -> String -> String -> [String] -> String -> (String, String, String) -> IO ()
-saveImageInfo user db caption description galleries imageType (thumbnailName, previewName, originalName) = do
-  let q = do
-        t <- DB.table IT.imageTable
-        DB.order [DB.desc t IT.indexNumber]
-        DB.project (IT.indexNumber DB.<< t DB.! IT.indexNumber)
-  rs <- DB.query db q
-  let nextIndex = if null rs
-                  then 1
-                  else 1 + (head rs DB.! IT.indexNumber)
-  ct <- getClockTime 
-  let utc = toUTCTime ct
-  DB.insert db IT.imageTable (IT.indexNumber <<- nextIndex  # IT.caption <<- caption # 
-                                IT.body <<- description # IT.thumbnail <<- thumbnailName # 
-                                IT.preview <<- previewName # IT.original <<- originalName # 
-                                IT.uploadTime <<- utc # IT.imageType <<- imageType # IT.userName <<- ( Dragonfly.Authorization.User.name user))
-  mapM_ (\name -> DB.insert db GIT.galleryImageTable (GIT.galleryName <<- name # GIT.indexNumber <<- nextIndex)) galleries
 
 -- | Process data from form
 uploadImageForm :: [Gallery] -> [String] -> XForm UploadData
@@ -273,7 +254,7 @@ augmentedTreeNode depth (Node (g, selectable) gs) =
 -- | Selection-list widget for authorized gallery
 gallerySelection :: (Gallery, Bool, Int) -> Maybe (String, X.Html)
 gallerySelection (gallery, selectable, depth) =
-    let nm = Dragonfly.ImageGallery.ImageGallery.name gallery 
+    let nm = Dragonfly.ImageGallery.Database.name gallery 
         hyphens = replicate depth '-'
     in if selectable then
            Just (nm, X.p << (hyphens ++ nm))
@@ -291,7 +272,7 @@ rootGallery = Gallery "" Nothing "" "" ""
 childTrees :: Maybe String -> [Gallery] -> [String] -> Forest (Gallery, Bool)
 childTrees par galleries authNames =
     let children = filter (childGallery par) galleries
-    in map (\child -> Node {rootLabel = (child,  Dragonfly.ImageGallery.ImageGallery.name child `elem` authNames), subForest = childTrees (Just $ Dragonfly.ImageGallery.ImageGallery.name child) galleries authNames}) children
+    in map (\child -> Node {rootLabel = (child,  Dragonfly.ImageGallery.Database.name child `elem` authNames), subForest = childTrees (Just $ Dragonfly.ImageGallery.Database.name child) galleries authNames}) children
 
 -- | Is gallery a child of par?
 childGallery :: Maybe String ->  Gallery -> Bool
