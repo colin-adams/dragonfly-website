@@ -57,38 +57,71 @@ galleriesDiv header galleries db pics pageParam = do
     let gallsDiv = X.ulist X.! [X.theclass "galleries"] << map displayGallery galleries
     picsDiv <- if null pics
               then return X.noHtml
-              else picturesDiv db pics pageParam
+              else picturesDiv header db pics pageParam
     return $ X.h1 << header
        +++ gallsDiv
        +++ picsDiv
 
 -- | HTML div showing first 10 thumbnails in gallery
-picturesDiv :: Database -> [Integer] -> Maybe Input -> IO X.Html
-picturesDiv db pics pageParam = do
+picturesDiv :: String -> Database -> [Integer] -> Maybe Input -> IO X.Html
+picturesDiv header db pics pageParam = do
   let pg = decodedPageNumber pageParam
       maximumThumbnails = 10
       dropCount = pg * maximumThumbnails
       totalThumbnails = length pics
       indices = take maximumThumbnails (drop dropCount pics)
   picsInfo <- pictureInfo db indices
-  return $ (X.ulist X.! [X.theclass "images"] << X.concatHtml (map pictureInfoItem picsInfo))
+  return $ (X.thediv << X.ulist X.! [X.theclass "images"] << X.concatHtml (map pictureInfoItem picsInfo))
     +++ if totalThumbnails <= maximumThumbnails
         then X.noHtml
-        else pagerDiv pg maximumThumbnails totalThumbnails
+        else pagerDiv header pg maximumThumbnails totalThumbnails
 
 
 -- | Html for gallery pager (links)
-pagerDiv :: Int -> Int -> Int -> X.Html
-pagerDiv currentPage thumbnailsPerPage thumbnailCount = 
-  X.thediv X.! [X.theclass "pager"] << X.noHtml -- contents
---    where contents = goToFirst +++ goToPrevious +++ mainPager +++ goToNext +++ goTopPrevious 
---          goToFirst = TODO put this in another module (with other functions??)
---            X.thespan X.! [X.theclass "pager-list"] <<
---            X.strong  X.! [X.theclass "pager-current"] << ""
+pagerDiv :: String -> Int -> Int -> Int -> X.Html
+pagerDiv header currentPage thumbnailsPerPage thumbnailCount = X.thediv X.! [X.theclass "pager"] << contents
+    where contents = goToFirst +++ goToPrevious +++ mainPager +++ goToNext +++ goToLast
+          newRequest = imageGalleryURL ++ "?" ++ galleryParameter ++ "=" ++ header
+          criticalPageNumber = 5                              
+          lastPage = ((thumbnailCount - 1) `div` thumbnailsPerPage)
+          goToFirst = if currentPage == 0
+                      then X.noHtml
+                      else X.anchor X.! [X.href $ newRequest, X.title "Go to first page", 
+                                         X.theclass "pager-first active"] << "« first" 
+          goToPrevious = if currentPage == 0
+                      then X.noHtml
+                      else X.anchor X.! [X.href $ newRequest ++ "&page=" ++ (show $ currentPage - 1), 
+                                         X.title "Go to previous page", X.theclass "pager-previous active"] << "‹ previous" 
+          goToLast = if currentPage == lastPage
+                      then X.noHtml
+                      else X.anchor X.! [X.href $ newRequest ++ "&page=" ++ (show lastPage), 
+                                         X.title "Go to last page", X.theclass "pager-last active"] << "last »" 
+          goToNext = if currentPage == lastPage
+                      then X.noHtml
+                      else X.anchor X.! [X.href $ newRequest ++ "&page=" ++ (show $ currentPage + 1), 
+                                         X.title "Go to next page", X.theclass "pager-next active"] << "next ›"
+          ellipsis = if currentPage < criticalPageNumber
+                     then X.noHtml
+                     else X.thespan X.! [X.theclass "pager-ellipsis"] << "…"
+          mainPager = if thumbnailCount > thumbnailsPerPage
+                      then let firstPageNum = if currentPage < criticalPageNumber then 1 else currentPage - 3
+                           in X.thespan X.! [X.theclass "pager-list"] << ellipsis +++ 
+                              map (pagerSpan currentPage newRequest) [firstPageNum .. (lastPage + 1)]
+                      else X.noHtml
+                        
+pagerSpan :: Int     -- ^ 0-based number of current page
+            -> String -- ^ URI stem for target
+            -> Int    -- ^ 1-based page number to be display
+            -> X.Html
+pagerSpan currentPage newRequest targetPage =
+  if currentPage == targetPage - 1
+  then X.strong X.! [X.theclass "pager-current"] << show targetPage
+  else X.anchor X.! [X.theclass "pager-previous active", X.title $ "go to page " ++ (show targetPage), 
+                 X.href $ newRequest  ++ "&page=" ++ (show $ targetPage - 1)] << show targetPage
 
 pictureInfoItem :: PictureInfo -> X.Html
 pictureInfoItem (thumbnail, preview, caption, uploadTime, user) =
-    X.li X.! [X.thestyle "height : 175px; width : 100px;"] << itemContents
+    X.li X.! [X.thestyle "height : 220px; width : 130px;"] << itemContents
       where itemContents = (X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << X.image X.! [X.src thumbnail]) +++ itemTrailer
             itemTrailer = X.h3 << X.anchor X.! [X.href $ X.stringToHtmlString previewRef] << caption +++
                           X.thediv X.! [X.theclass "author"] << ("Posted by: " ++ user) +++
