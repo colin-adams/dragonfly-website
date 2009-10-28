@@ -83,22 +83,22 @@ pagerDiv header currentPage thumbnailsPerPage thumbnailCount = X.thediv X.! [X.t
     where contents = goToFirst +++ goToPrevious +++ mainPager +++ goToNext +++ goToLast
           newRequest = imageGalleryURL ++ "?" ++ galleryParameter ++ "=" ++ header
           criticalPageNumber = 5                              
-          lastPage = ((thumbnailCount - 1) `div` thumbnailsPerPage)
+          lastPage = (thumbnailCount - 1) `div` thumbnailsPerPage
           goToFirst = if currentPage == 0
                       then X.noHtml
-                      else X.anchor X.! [X.href $ newRequest, X.title "Go to first page", 
+                      else X.anchor X.! [X.href newRequest, X.title "Go to first page", 
                                          X.theclass "pager-first active"] << "« first" 
           goToPrevious = if currentPage == 0
                       then X.noHtml
-                      else X.anchor X.! [X.href $ newRequest ++ "&page=" ++ (show $ currentPage - 1), 
+                      else X.anchor X.! [X.href $ newRequest ++ "&page=" ++ show (currentPage - 1), 
                                          X.title "Go to previous page", X.theclass "pager-previous active"] << "‹ previous" 
           goToLast = if currentPage == lastPage
                       then X.noHtml
-                      else X.anchor X.! [X.href $ newRequest ++ "&page=" ++ (show lastPage), 
+                      else X.anchor X.! [X.href $ newRequest ++ "&page=" ++ show lastPage, 
                                          X.title "Go to last page", X.theclass "pager-last active"] << "last »" 
           goToNext = if currentPage == lastPage
                       then X.noHtml
-                      else X.anchor X.! [X.href $ newRequest ++ "&page=" ++ (show $ currentPage + 1), 
+                      else X.anchor X.! [X.href $ newRequest ++ "&page=" ++ show (currentPage + 1), 
                                          X.title "Go to next page", X.theclass "pager-next active"] << "next ›"
           ellipsis = if currentPage < criticalPageNumber
                      then X.noHtml
@@ -116,8 +116,8 @@ pagerSpan :: Int     -- ^ 0-based number of current page
 pagerSpan currentPage newRequest targetPage =
   if currentPage == targetPage - 1
   then X.strong X.! [X.theclass "pager-current"] << show targetPage
-  else X.anchor X.! [X.theclass "pager-previous active", X.title $ "go to page " ++ (show targetPage), 
-                 X.href $ newRequest  ++ "&page=" ++ (show $ targetPage - 1)] << show targetPage
+  else X.anchor X.! [X.theclass "pager-previous active", X.title $ "go to page " ++ show targetPage, 
+                 X.href $ newRequest  ++ "&page=" ++ show (targetPage - 1)] << show targetPage
 
 pictureInfoItem :: PictureInfo -> X.Html
 pictureInfoItem (thumbnail, preview, caption, uploadTime, user) =
