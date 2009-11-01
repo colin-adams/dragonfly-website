@@ -23,7 +23,6 @@ import System.Console.GetOpt
 main :: IO ()
 main = do
   args <- getArgs
-  progName <- getProgName
   let (options, non_options, errors) = getOpt RequireOrder optionDescriptions args
   if null errors && null non_options then
         initialize options
@@ -33,39 +32,40 @@ main = do
 usage :: [String] -> IO ()
 usage errors = do
   mapM_ putStrLn errors
-  putStrLn $ usageInfo "\nUsage: Initialize database, passing name and password for principal adminstrator" optionDescriptions
+  putStrLn $ usageInfo "\nUsage: Initialize database, passing name, password and email address for principal adminstrator" optionDescriptions
 
-data Options = Options {name :: String, passwd :: String} deriving Show
+data Options = Options {name :: String, passwd :: String, emailAdr :: String} deriving Show
 
 defaultOptions :: Options
-defaultOptions = Options {name = "", passwd = ""}
+defaultOptions = Options {name = "", passwd = "", emailAdr = ""}
 
 -- | Initialize the database.
 initialize :: [Options -> Options] -> IO ()
 initialize options = case length options of
-    2 -> do
+    3 -> do
       let opts = foldl (flip id) defaultOptions options
       postgresqlConnect [] $ \db -> do
-                        addAdministrator (name opts) (passwd opts) db
+                        addAdministrator (name opts) (passwd opts) (emailAdr opts) db
                         return ()
-    _ -> usage ["Exactly 2 options must be supplied"]
+    _ -> usage ["Exactly 3 options must be supplied"]
 
 optionDescriptions :: [OptDescr (Options -> Options)]
 optionDescriptions = 
     [
-     Option "n" ["name"] (ReqArg (\n opts -> opts {name = n}) "Name") "Name of principal administartor",
-     Option "p" ["password"] (ReqArg (\p opts -> opts {passwd = p}) "Password") "Password (not encrypyted) for principal administartor"
+     Option "n" ["name"] (ReqArg (\n opts -> opts {name = n}) "Name") "Name of principal administrator",
+     Option "p" ["password"] (ReqArg (\p opts -> opts {passwd = p}) "Password") "Password (not encrypyted) for principal administrator",
+     Option "e" ["email"] (ReqArg (\e opts -> opts {emailAdr = e}) "Email") "Email address for principal administrator"
     ]
 
-addAdministrator :: String -> String -> Database -> IO ()
-addAdministrator user pass db = do
+addAdministrator :: String -> String -> String -> Database -> IO ()
+addAdministrator user pass em db = do
   p <- buildSaltAndHash pass
   transaction db $ do
     insert db authTable (authName <<- administratorAuthority)
     insert db UA.userAuthTable (UA.userName <<- user # UA.authName <<- administratorAuthority)
     mapM_ (insert db capabilitiesTable . (capability <<-)) knownCapabilities
     mapM_ (\c -> insert db AC.authCapabilitiesTable (AC.authName <<- administratorAuthority # AC.capability <<- c)) knownCapabilities
-    insert db userTable (userName <<- user # password <<- saltToString p # enabled <<- True)
+    insert db userTable (userName <<- user # password <<- saltToString p # email <<- em # enabled <<- True)
 
            
 

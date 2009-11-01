@@ -48,11 +48,11 @@ initialState db = do
   return $ ApplicationState db  sess
 
 -- | Create and save a new session, given a session key
-newSession :: String -> [(String, Group)] -> SessionKey -> MyServerPartT ()
-newSession u g k = do
+newSession :: String -> String -> [(String, Group)] -> SessionKey -> MyServerPartT ()
+newSession u e g k = do
   ApplicationState _ sess <- ask
   s <- liftIO $ takeMVar sess 
   let m = unsession s
-      m' = M.insert k (User u k g) m
+      m' = M.insert k (User u e k g) m
       s' = s {unsession = m'}
   liftIO $ putMVar sess s'

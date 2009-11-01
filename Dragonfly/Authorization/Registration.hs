@@ -33,8 +33,9 @@ import Dragonfly.Authorization.User
 import Dragonfly.Authorization.Auth
 import Dragonfly.Forms
 
-data Registration = Registration { regUser :: String
-                                 , regPass :: String }
+data Registration = Registration { regUser :: String,
+                                   regEmail :: String,
+                                   regPass :: String }
 
 cookieExpirationTime :: Seconds
 cookieExpirationTime = 2 * 3600  -- 2 hours
@@ -50,7 +51,7 @@ handleRegistration = do
   withForm registerURL (register db) showErrorsInline completeRegistration
 
 login :: Database -> XForm Registration
-login db = Registration <$> loginUser db <*> pass "Password"
+login db = Registration <$> loginUser db <*> emailForm <*> pass "Password"
 
 loginUser :: Database -> XForm String
 loginUser db = input `F.checkM` F.ensureM valid error where
@@ -59,6 +60,12 @@ loginUser db = input `F.checkM` F.ensureM valid error where
       missing <- userAbsent name db
       return $ not missing
     error = "Username not recognised."
+
+emailForm :: XForm String
+emailForm = input `F.checkM` F.ensureM valid error where
+  input = "Email address" `label` F.input Nothing
+  valid em = return True  -- TODO
+  error = "Invalid email address"
 
 completeLogin :: Registration -> MyServerPartT Response
 completeLogin reg = do
@@ -80,7 +87,7 @@ completeLogin reg = do
     else okHtml $ X.p << ("Password not validated for user name " ++ u)
 
 register :: Database -> XForm Registration
-register db = Registration <$> registerUser db <*> passConfirmed
+register db = Registration <$> registerUser db <*> emailForm <*> passConfirmed
 
 registerUser :: Database -> XForm String
 registerUser db = pureRegisterUser `F.checkM` F.ensureM valid error where
@@ -121,8 +128,9 @@ completeRegistration :: Registration -> MyServerPartT Response
 completeRegistration reg = do
   ApplicationState db _ <- ask
   let u = regUser reg
+      e = regEmail reg
   p <- liftIO $ buildSaltAndHash (regPass reg)
-  liftIO $ DB.transaction db (DB.insert db userTable (userName <<- u # password <<- saltToString p # enabled <<- False))
+  liftIO $ DB.transaction db (DB.insert db userTable (userName <<- u # password <<- saltToString p # email <<- e # enabled <<- False))
   signIn reg []
   rq <- askRq
   let c = lookup "_cont" (rqInputs rq)
@@ -155,10 +163,11 @@ label l = F.plug (\xhtml -> X.p << (X.label << (l ++ ": ") +++ xhtml))
 signIn :: Registration -> [(String, Group)] -> MyServerPartT ()
 signIn reg groups = do
   let u = regUser reg
+      e = regEmail reg
   key <- liftIO randomIO
   let c = mkCookie sessionCookie (show key)
   addCookie cookieExpirationTime c
-  newSession u groups key
+  newSession u e groups key
 
 registeredPage :: String -> String -> X.Html
 registeredPage u continuation = 

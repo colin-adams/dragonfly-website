@@ -21,7 +21,7 @@ databaseTables = [userTable, authTable, userAuthTable, capabilitiesTable, authCa
 -- | Definition of users.
 -- | Enabled users also have a list of authorization groups in user_auth_table
 userTable :: TInfo
-userTable = TInfo {tname = "userTable", cols = [userColumn, passwordColumn, enabledColumn]}
+userTable = TInfo {tname = "userTable", cols = [userColumn, passwordColumn, emailColumn, enabledColumn]}
 
 -- | All defined authorization groups
 authTable :: TInfo
@@ -81,6 +81,9 @@ authColumn = CInfo {cname = "authName", descr = (StringT, False)}
 
 passwordColumn :: CInfo
 passwordColumn = CInfo {cname = "password", descr = (StringT, False)}
+
+emailColumn :: CInfo
+emailColumn = CInfo {cname = "email", descr = (StringT, False)}
 
 enabledColumn :: CInfo
 enabledColumn = CInfo {cname = "enabled", descr = (BoolT, False)}

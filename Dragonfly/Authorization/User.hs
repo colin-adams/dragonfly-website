@@ -11,7 +11,7 @@ newtype SessionKey = SessionKey Integer deriving (Read, Show, Ord, Eq, Num, Rand
 type Groups = [(String, Group)]
 
 -- | Logged-in users
-data User = User {name :: String, sessionKey :: SessionKey, groups :: Groups} deriving  (Read, Show, Eq)
+data User = User {name :: String, emailAddress :: String, sessionKey :: SessionKey, groups :: Groups} deriving  (Read, Show, Eq)
 
 -- | Is user authorized to a specific capability?
 authorizedTo :: User -> String -> Bool
